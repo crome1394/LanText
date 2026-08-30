@@ -10,6 +10,13 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-30
+
+### Changed
+
+- About “For LAN operators” examples use `192.168.1.42` and `lantext.local`.
+- Store screenshot 4 is a fictional two-pane inbox for demonstration.
+
 ## [0.2.0] — 2026-08-30
 
 Test build for sideload. Same developer-signed flow as Point Forecast.
@@ -69,5 +76,6 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.1]: #021--2026-08-30
 [0.2.0]: #020--2026-08-30
 [0.1.0]: #010--2026-08-30
