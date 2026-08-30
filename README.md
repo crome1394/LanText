@@ -154,8 +154,8 @@ See [RELEASE.md](RELEASE.md).
 
 Not listed yet. Store metadata lives in
 [`fastlane/metadata/android/en-US/`](fastlane/metadata/android/en-US/).
-The planned packaging is developer-signed reproducible builds. Details and
-the `fdroiddata` recipe: [F-DROID.md](F-DROID.md).
+The first listing will be developer-signed reproducible builds (`Binaries` +
+`AllowedAPKSigningKeys`). Recipe and MR notes: [F-DROID.md](F-DROID.md).
 
 Tag releases as `v<versionName>` (semver) so F-Droid can follow tags.
 

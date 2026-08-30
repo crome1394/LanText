@@ -1,13 +1,18 @@
-# Draft metadata for gitlab.com/fdroid/fdroiddata
-# Copy to metadata/app.lantext.yml when listing. Do not submit until a
-# developer-signed GitHub release exists and has been tested.
-# This file is *not* read by the Android Gradle build.
+# Copy this file to metadata/app.lantext.yml in gitlab.com/fdroid/fdroiddata.
+# Do not open the MR until testing of the tagged GitHub APK is done.
+#
+# If a newer vX.Y.Z ships before the MR, update:
+#   Builds.versionName / versionCode
+#   Builds.commit  (full SHA of that tag: git rev-parse vX.Y.Z^{})
+#   CurrentVersion / CurrentVersionCode
+#
+# This file is not read by the Android Gradle build.
 
 Categories:
   - Phone & SMS
   - Internet
 License: Apache-2.0
-AuthorName: Matthew Crome
+AuthorName: crome1394
 AuthorEmail: crome197@gmail.com
 SourceCode: https://github.com/crome1394/LanText
 IssueTracker: https://github.com/crome1394/LanText/issues
@@ -17,25 +22,26 @@ AutoName: LanText
 
 RepoType: git
 Repo: https://github.com/crome1394/LanText.git
-Binaries: https://github.com/crome1394/LanText/releases/download/v%v/app-release-signed.apk
+Binaries:
+  https://github.com/crome1394/LanText/releases/download/v%v/app-release-signed.apk
 
 Builds:
-  - versionName: 0.1.0
-    versionCode: 1
-    commit: v0.1.0
+  - versionName: 0.2.3
+    versionCode: 5
+    commit: 6b42261de4fea3e043d22db69b5b0e3165a29763
     subdir: app
     gradle:
       - yes
 
-# SHA-256 of the developer release certificate (scripts/expected-release-cert.sha256).
 AllowedAPKSigningKeys: fa1de10dedf73a39d9b1aba9b10d941e6c0dff22b3709a4b4d44047e4c007770
 
 MaintainerNotes: |-
-  Developer-signed reproducible builds (Binaries + AllowedAPKSigningKeys),
-  same flow as com.crome.forecastpoint. First listing should use this mode
-  so users never migrate off an F-Droid signing key.
+  Exclusive upstream-signed reproducible builds (Binaries +
+  AllowedAPKSigningKeys) from first inclusion. Gradle assembleRelease
+  is unsigned; GitHub APKs are signed with Android Build Tools 34
+  apksigner. Store metadata is Fastlane in the upstream repo.
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.1.0
-CurrentVersionCode: 1
+CurrentVersion: 0.2.3
+CurrentVersionCode: 5

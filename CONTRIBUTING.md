@@ -59,8 +59,9 @@ Versions follow [Semantic Versioning](https://semver.org/). The Android
 The full checklist (unsigned Gradle build, Build Tools 34 `apksigner`,
 GitHub Release asset `app-release-signed.apk`) is in [RELEASE.md](RELEASE.md).
 
-Do not put signing keys in the repo. F-Droid is not listed yet; when it is,
-it will republish the same developer-signed APK after a reproducible rebuild.
+Do not put signing keys in the repo. F-Droid is not listed yet; the first
+listing will republish the same developer-signed APK after a reproducible
+rebuild. See [F-DROID.md](F-DROID.md).
 
 ## License of contributions
 

@@ -22,9 +22,16 @@ the app. Official docs:
 ## What is *not* required
 
 Listing on F-Droid does **not** require this. The classic flow (F-Droid builds
-and signs) remains valid. Upstream signing is the upgrade we intend to use
-from the first listing, so users never have to uninstall/reinstall for a
-later key change.
+and signs) remains valid.
+
+Official docs **encourage** exclusive upstream signing for **new** apps,
+because Android cannot update across signing keys. Switching later forces
+users to uninstall/reinstall. The first LanText fdroiddata MR should
+therefore include `Binaries` + `AllowedAPKSigningKeys` (not F-Droid signing
+first). In that mode there is **no** F-Droid-signed fallback: a mismatch
+skips that version.
+
+See [F-DROID.md](../F-DROID.md) for the copy-paste recipe and MR notes.
 
 ## Release contract
 

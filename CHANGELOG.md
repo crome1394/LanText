@@ -10,6 +10,12 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Changed
+
+- F-Droid draft recipe is exclusive upstream-signed reproducible builds
+  for first inclusion (`docs/fdroiddata.yml`: full commit SHA, `subdir: app`,
+  Fastlane-only store metadata).
+
 ## [0.2.3] — 2026-08-30
 
 Sideload build for testers.

@@ -95,16 +95,19 @@ Push the tag only when the signed asset is ready to attach.
 
 ## F-Droid (later)
 
-With `Binaries` + `AllowedAPKSigningKeys` in [docs/fdroiddata.yml](docs/fdroiddata.yml):
+First inclusion is exclusive upstream-signed RB. Copy
+[docs/fdroiddata.yml](docs/fdroiddata.yml) to an fdroiddata MR as
+`metadata/app.lantext.yml`.
 
-- Copy that file to an fdroiddata MR as `metadata/app.lantext.yml`
-- `UpdateCheckMode: Tags` picks up `vX.Y.Z`
-- F-Droid rebuilds from the tag and compares to your GitHub APK
+- `Builds.commit` must be the **full SHA** of the tag (`git rev-parse vX.Y.Z^{}`), never the tag name
+- If this tag is newer than the draft, update `versionName`, `versionCode`, `commit`, `CurrentVersion`, and `CurrentVersionCode`
+- `UpdateCheckMode: Tags` picks up later `vX.Y.Z` tags
+- F-Droid rebuilds from the SHA and compares to GitHub `app-release-signed.apk`
 - On match, they publish **your** signature
-- On mismatch, that version is skipped (they will not fall back to F-Droid signing)
+- On mismatch, that version is skipped (no F-Droid-signed fallback)
 
 See [F-DROID.md](F-DROID.md). Do not open the MR until testing on a signed
-APK is done.
+APK is done. Do not bump versions mid-review unless a maintainer asks.
 
 ## Checklist
 
@@ -117,4 +120,4 @@ APK is done.
 - [ ] Device smoke test (pair, SMS, MMS, leave Wi-Fi, widget)
 - [ ] Tag `vX.Y.Z` pushed
 - [ ] GitHub Release with asset **`app-release-signed.apk`**
-- [ ] (First listing only) fdroiddata MR from `docs/fdroiddata.yml`
+- [ ] (First listing only) fdroiddata MR: copy `docs/fdroiddata.yml` → `metadata/app.lantext.yml`, full SHA, Fastlane-only store copy
