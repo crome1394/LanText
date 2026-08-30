@@ -10,6 +10,23 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Added
+
+- Web appearance picker: Auto / Light / Dark, plus nine palettes (Fern, Ocean,
+  Dusk, Ember, Slate, Sakura, Meadow, Nord, Contrast). Auto follows the system
+  color scheme; each palette has a light and dark variant.
+- Save an unknown number from a thread as a new contact, or add it to an
+  existing contact (second phone). Requires contacts write permission.
+- In-app “Why these permissions” section (About), including why location and
+  Nearby devices are requested only so Android will reveal the Wi-Fi name.
+- When a required permission is missing, a popup explains each one, with a
+  Grant all button. The home-screen grant button is gone.
+
+### Removed
+
+- Conversation delete in the web UI. Android only lets the default SMS app
+  delete threads, so the control could not work as a companion.
+
 ## [0.1.0] — 2026-08-30
 
 First public release. Companion app for Android 8+ that serves a private

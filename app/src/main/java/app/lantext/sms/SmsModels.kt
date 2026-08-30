@@ -14,6 +14,7 @@ data class ConversationDto(
     val isGroup: Boolean,
     val recipients: List<String>,
     val avatarColor: String,
+    val contactId: String? = null,
 )
 
 @Serializable
@@ -61,4 +62,15 @@ data class SendRequest(
 data class SearchHit(
     val conversation: ConversationDto,
     val message: MessageDto?,
+)
+
+@Serializable
+data class CreateContactRequest(
+    val name: String = "",
+    val number: String = "",
+)
+
+@Serializable
+data class AddPhoneRequest(
+    val number: String = "",
 )

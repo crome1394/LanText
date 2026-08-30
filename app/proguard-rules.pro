@@ -3,3 +3,5 @@
 -keep class kotlinx.serialization.** { *; }
 -dontwarn org.slf4j.**
 -dontwarn kotlinx.atomicfu.**
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean

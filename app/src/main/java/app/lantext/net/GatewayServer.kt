@@ -4,7 +4,9 @@ import android.content.Context
 import android.webkit.MimeTypeMap
 import app.lantext.data.PairedDevice
 import app.lantext.data.PairingManager
+import app.lantext.sms.AddPhoneRequest
 import app.lantext.sms.ContactsRepository
+import app.lantext.sms.CreateContactRequest
 import app.lantext.sms.SendRequest
 import app.lantext.sms.SmsRepository
 import app.lantext.util.PrivateNetwork
@@ -185,10 +187,6 @@ class GatewayServer(
                         sms.markRead(uri.split("/")[4])
                         json(Response.Status.OK, mapOf("ok" to true))
                     }
-                    method == Method.DELETE && uri.matches(Regex("/api/v1/conversations/[^/]+")) -> {
-                        sms.deleteThread(uri.split("/")[4])
-                        json(Response.Status.OK, mapOf("ok" to true))
-                    }
                     method == Method.POST && uri == "/api/v1/conversations" -> {
                         val req = json.decodeFromString<SendRequest>(readBody(session))
                         jsonRaw(json.encodeToString(sendOutgoing(req, req.recipients)), 202)
@@ -204,6 +202,19 @@ class GatewayServer(
                     method == Method.GET && uri == "/api/v1/contacts" -> {
                         contacts.refresh()
                         jsonRaw(json.encodeToString(contacts.search(q("q"))))
+                    }
+                    method == Method.POST && uri == "/api/v1/contacts" -> {
+                        val req = json.decodeFromString<CreateContactRequest>(readBody(session))
+                        val created = contacts.createContact(req.name, req.number)
+                        sms.emitRefresh()
+                        jsonRaw(json.encodeToString(created), 201)
+                    }
+                    method == Method.POST && uri.matches(Regex("/api/v1/contacts/[^/]+/phones")) -> {
+                        val id = uri.split("/")[4]
+                        val req = json.decodeFromString<AddPhoneRequest>(readBody(session))
+                        val updated = contacts.addPhoneToContact(id, req.number)
+                        sms.emitRefresh()
+                        jsonRaw(json.encodeToString(updated))
                     }
                     method == Method.GET && uri == "/api/v1/contacts/photo" -> {
                         val bytes = contacts.photoBytes(q("number"))

@@ -7,6 +7,17 @@
   <title>LanText</title>
   <link rel="icon" href="/favicon.svg" />
   <link rel="stylesheet" href="/styles.css" />
+  <script>
+    (function () {
+      var p = localStorage.getItem("lantext_palette") || "fern";
+      var m = localStorage.getItem("lantext_mode") || "auto";
+      var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var r = m === "light" || m === "dark" ? m : (dark ? "dark" : "light");
+      document.documentElement.dataset.palette = p;
+      document.documentElement.dataset.mode = m;
+      document.documentElement.dataset.resolved = r;
+    })();
+  </script>
 </head>
 <body>
   <div id="app">
@@ -21,6 +32,7 @@
           <button type="submit" id="pair-btn">Pair this computer</button>
         </form>
         <p id="pair-status" class="status"></p>
+        <button type="button" id="pair-theme-btn" class="text-btn">Appearance</button>
       </div>
     </section>
 
@@ -31,6 +43,7 @@
             <h1>LanText</h1>
             <p class="muted" id="conn-label">Connected</p>
           </div>
+          <button id="theme-btn" class="icon-btn" title="Appearance">Aa</button>
           <button id="new-btn" class="icon-btn" title="New message (Ctrl+N)">+</button>
         </header>
         <div class="search-wrap">
@@ -41,9 +54,6 @@
         </button>
         <div id="convo-list" class="convo-list"></div>
       </aside>
-      <div id="convo-menu" class="menu" hidden>
-        <button type="button" id="menu-delete" class="danger">Delete conversation</button>
-      </div>
       <main id="thread">
         <div id="empty-thread" class="empty">
           <p>Select a conversation</p>
@@ -56,6 +66,7 @@
               <h2 id="thread-name"></h2>
               <p id="thread-number" class="muted"></p>
             </div>
+            <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
           <div id="messages" class="messages"></div>
           <form id="composer">
@@ -109,6 +120,45 @@
           <tr><td><kbd>?</kbd></td><td>Show this list</td></tr>
         </table>
         <p class="muted">On a Mac, use ⌘ in place of Ctrl.</p>
+      </div>
+    </div>
+    <div id="theme-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header>
+          <h2>Appearance</h2>
+          <button type="button" id="close-theme" class="icon-btn">×</button>
+        </header>
+        <p class="muted">Auto follows your system light or dark setting. Palettes keep both appearances.</p>
+        <div class="seg" id="theme-mode" role="group" aria-label="Light or dark">
+          <button type="button" data-mode="auto">Auto</button>
+          <button type="button" data-mode="light">Light</button>
+          <button type="button" data-mode="dark">Dark</button>
+        </div>
+        <div class="theme-grid" id="theme-grid"></div>
+      </div>
+    </div>
+    <div id="contact-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header>
+          <h2>Save this number</h2>
+          <button type="button" id="close-contact" class="icon-btn">×</button>
+        </header>
+        <p class="muted" id="contact-number-label"></p>
+        <div class="seg" id="contact-mode" role="group" aria-label="Save as">
+          <button type="button" data-contact-mode="new" class="active">New contact</button>
+          <button type="button" data-contact-mode="existing">Add to existing</button>
+        </div>
+        <form id="save-contact-form">
+          <div id="contact-new-fields">
+            <label for="contact-name">Name</label>
+            <input id="contact-name" name="name" autocomplete="name" placeholder="Name" required />
+          </div>
+          <div id="contact-existing-fields" hidden>
+            <input id="contact-existing-search" type="search" placeholder="Search contacts" />
+            <div id="contact-existing-list"></div>
+          </div>
+          <button type="submit">Save</button>
+        </form>
       </div>
     </div>
   </div>

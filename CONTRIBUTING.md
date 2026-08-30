@@ -48,16 +48,19 @@ There is no substitute for a phone on Wi-Fi and a browser on the same LAN:
    it (not only a failed outgoing item in Fossify / Google Messages).
 4. Leave the allowed Wi-Fi; the server should stop.
 5. Toggle the widget.
+6. Unknown number: Save contact (new, and add-to-existing).
+7. Appearance: Auto / Light / Dark and at least one other palette.
 
 ## Releases
 
-1. Bump `versionName` and `versionCode` in `app/build.gradle.kts`.
-2. Add a section to [CHANGELOG.md](CHANGELOG.md).
-3. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`
-   (max 500 characters).
-4. Commit, tag `v<versionName>` (example: `v0.1.0`), and push the tag.
+Versions follow [Semantic Versioning](https://semver.org/). The Android
+`versionCode` increases by 1 each release. Tags are `v<versionName>`.
 
-Do not put signing keys in the repo. F-Droid builds from the tag.
+The full checklist (unsigned Gradle build, Build Tools 34 `apksigner`,
+GitHub Release asset `app-release-signed.apk`) is in [RELEASE.md](RELEASE.md).
+
+Do not put signing keys in the repo. F-Droid is not listed yet; when it is,
+it will republish the same developer-signed APK after a reproducible rebuild.
 
 ## License of contributions
 

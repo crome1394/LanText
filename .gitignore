@@ -9,6 +9,7 @@ local.properties
 captures/
 app/release/
 app/debug/
+dist/
 keystore.properties
 *.jks
 *.keystore

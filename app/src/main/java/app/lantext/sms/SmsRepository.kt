@@ -249,35 +249,6 @@ class SmsRepository(
         )
     }
 
-    suspend fun deleteThread(threadId: String) = withContext(Dispatchers.IO) {
-        val id = threadId.toLongOrNull() ?: throw IllegalArgumentException("Invalid conversation")
-        try {
-            var deleted = 0
-            deleted += context.contentResolver.delete(
-                Telephony.Sms.CONTENT_URI,
-                "${Telephony.Sms.THREAD_ID}=?",
-                arrayOf(id.toString()),
-            )
-            deleted += context.contentResolver.delete(
-                Telephony.Mms.CONTENT_URI,
-                "${Telephony.Mms.THREAD_ID}=?",
-                arrayOf(id.toString()),
-            )
-            val conv = Uri.parse("content://mms-sms/conversations/$id")
-            deleted += context.contentResolver.delete(conv, null, null)
-            if (deleted <= 0) {
-                throw IllegalStateException(
-                    "Could not delete that conversation. Android only lets the default messaging app delete threads — remove it in Fossify Messages.",
-                )
-            }
-        } catch (e: SecurityException) {
-            throw IllegalStateException(
-                "Android only lets the default messaging app delete conversations. Open Fossify Messages and delete it there.",
-            )
-        }
-        emitRefresh()
-    }
-
     fun markRead(threadId: String) {
         try {
             val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
@@ -544,6 +515,7 @@ class SmsRepository(
                 isGroup = address.contains(","),
                 recipients = address.split(",").map { it.trim() }.filter { it.isNotBlank() },
                 avatarColor = contact?.color ?: ContactsRepository.avatarColor(name.ifBlank { address }),
+                contactId = contact?.id,
             )
         }
     }

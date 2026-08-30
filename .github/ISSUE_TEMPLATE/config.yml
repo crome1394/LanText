@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Security advisory
+    url: https://github.com/crome1394/LanText/security/advisories/new
+    about: Private report if a stranger could read or send texts without pairing

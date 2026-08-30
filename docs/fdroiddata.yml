@@ -1,5 +1,6 @@
 # Draft metadata for gitlab.com/fdroid/fdroiddata
-# Replace every TODO, then open a merge request.
+# Copy to metadata/app.lantext.yml when listing. Do not submit until a
+# developer-signed GitHub release exists and has been tested.
 # This file is *not* read by the Android Gradle build.
 
 Categories:
@@ -7,12 +8,16 @@ Categories:
   - Internet
 License: Apache-2.0
 AuthorName: Matthew Crome
-WebSite: TODO_WEBSITE_OR_REMOVE
-SourceCode: TODO_GIT_HTTPS_URL
-IssueTracker: TODO_GIT_HTTPS_URL/issues
+AuthorEmail: crome197@gmail.com
+SourceCode: https://github.com/crome1394/LanText
+IssueTracker: https://github.com/crome1394/LanText/issues
+Changelog: https://github.com/crome1394/LanText/blob/main/CHANGELOG.md
+
+AutoName: LanText
 
 RepoType: git
-Repo: TODO_GIT_HTTPS_URL
+Repo: https://github.com/crome1394/LanText.git
+Binaries: https://github.com/crome1394/LanText/releases/download/v%v/app-release-signed.apk
 
 Builds:
   - versionName: 0.1.0
@@ -21,6 +26,14 @@ Builds:
     subdir: app
     gradle:
       - yes
+
+# SHA-256 of the developer release certificate (scripts/expected-release-cert.sha256).
+AllowedAPKSigningKeys: fa1de10dedf73a39d9b1aba9b10d941e6c0dff22b3709a4b4d44047e4c007770
+
+MaintainerNotes: |-
+  Developer-signed reproducible builds (Binaries + AllowedAPKSigningKeys),
+  same flow as com.crome.forecastpoint. First listing should use this mode
+  so users never migrate off an F-Droid signing key.
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags

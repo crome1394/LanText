@@ -1,4 +1,18 @@
 const TOKEN_KEY = "lantext_token";
+const THEME_PALETTE_KEY = "lantext_palette";
+const THEME_MODE_KEY = "lantext_mode";
+
+const PALETTES = [
+  { id: "fern", name: "Fern", swatch: ["#156b57", "#1f8a70", "#f3f6f4"] },
+  { id: "ocean", name: "Ocean", swatch: ["#0b6e99", "#38bdf8", "#f0f6fa"] },
+  { id: "dusk", name: "Dusk", swatch: ["#5b3cc4", "#a78bfa", "#f6f3fb"] },
+  { id: "ember", name: "Ember", swatch: ["#c2410c", "#fb923c", "#fbf6f1"] },
+  { id: "slate", name: "Slate", swatch: ["#334155", "#94a3b8", "#f4f5f7"] },
+  { id: "sakura", name: "Sakura", swatch: ["#be185d", "#f472b6", "#fdf6f8"] },
+  { id: "meadow", name: "Meadow", swatch: ["#3f7d20", "#86efac", "#f4faf2"] },
+  { id: "nord", name: "Nord", swatch: ["#5e81ac", "#88c0d0", "#eceff4"] },
+  { id: "contrast", name: "Contrast", swatch: ["#000000", "#ffffff", "#e6e6e6"] },
+];
 
 const pairView = document.getElementById("pair-view");
 const appView = document.getElementById("app-view");
@@ -23,8 +37,9 @@ const backBtn = document.getElementById("back-btn");
 const connLabel = document.getElementById("conn-label");
 const newBody = document.getElementById("new-body");
 const helpModal = document.getElementById("help-modal");
-const convoMenu = document.getElementById("convo-menu");
-const menuDelete = document.getElementById("menu-delete");
+const themeModal = document.getElementById("theme-modal");
+const contactModal = document.getElementById("contact-modal");
+const saveContactBtn = document.getElementById("save-contact-btn");
 const notifyBanner = document.getElementById("notify-banner");
 const threadEl = document.getElementById("thread");
 const newFileInput = document.getElementById("new-file-input");
@@ -36,8 +51,80 @@ let selectedId = null;
 let pendingImage = null;
 let pendingNewImage = null;
 let selectedContact = null;
+let selectedExistingContact = null;
+let contactSaveMode = "new";
+let contactModalNumber = "";
 let socket = null;
 let recentNoticeKeys = [];
+
+function currentPalette() {
+  return localStorage.getItem(THEME_PALETTE_KEY) || "fern";
+}
+function currentMode() {
+  return localStorage.getItem(THEME_MODE_KEY) || "auto";
+}
+function resolvedMode(mode) {
+  if (mode === "light" || mode === "dark") return mode;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+function applyTheme() {
+  const palette = currentPalette();
+  const mode = currentMode();
+  const root = document.documentElement;
+  root.dataset.palette = palette;
+  root.dataset.mode = mode;
+  root.dataset.resolved = resolvedMode(mode);
+  syncThemeControls();
+}
+function syncThemeControls() {
+  const palette = currentPalette();
+  const mode = currentMode();
+  document.querySelectorAll("#theme-mode button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+  document.querySelectorAll(".theme-choice").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.palette === palette);
+  });
+}
+function renderThemeGrid() {
+  const grid = document.getElementById("theme-grid");
+  if (!grid || grid.childElementCount) return;
+  for (const p of PALETTES) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "theme-choice";
+    btn.dataset.palette = p.id;
+    btn.innerHTML = `<div class="theme-swatch">${p.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><div class="theme-choice-name">${escapeHtml(p.name)}</div>`;
+    btn.addEventListener("click", () => {
+      localStorage.setItem(THEME_PALETTE_KEY, p.id);
+      applyTheme();
+    });
+    grid.appendChild(btn);
+  }
+}
+function openTheme() {
+  renderThemeGrid();
+  themeModal.hidden = false;
+  syncThemeControls();
+}
+function closeTheme() { themeModal.hidden = true; }
+
+applyTheme();
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (currentMode() === "auto") applyTheme();
+});
+document.getElementById("theme-mode").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-mode]");
+  if (!btn) return;
+  localStorage.setItem(THEME_MODE_KEY, btn.dataset.mode);
+  applyTheme();
+});
+document.getElementById("theme-btn").addEventListener("click", openTheme);
+document.getElementById("pair-theme-btn").addEventListener("click", openTheme);
+document.getElementById("close-theme").addEventListener("click", closeTheme);
+themeModal.addEventListener("click", (e) => {
+  if (e.target === themeModal) closeTheme();
+});
 
 function authHeaders(extra = {}) {
   const headers = { ...extra };
@@ -72,6 +159,8 @@ function showPair() {
   appView.hidden = true;
   closeNewModal();
   closeHelp();
+  closeTheme();
+  closeContactModal();
 }
 
 function showApp() {
@@ -79,6 +168,8 @@ function showApp() {
   appView.hidden = false;
   closeNewModal();
   closeHelp();
+  closeTheme();
+  closeContactModal();
 }
 
 function openNewModal() {
@@ -270,18 +361,6 @@ function renderConversations(filter) {
       </div>
       <div class="when">${formatTime(c.timestamp)}</div>`;
     el.addEventListener("click", () => openThread(c.id, true));
-    el.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      showConvoMenu(c.id, e.clientX, e.clientY);
-    });
-    let pressTimer = null;
-    el.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse") return;
-      pressTimer = setTimeout(() => showConvoMenu(c.id, e.clientX, e.clientY), 550);
-    });
-    ["pointerup", "pointercancel", "pointerleave"].forEach((name) => {
-      el.addEventListener(name, () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
-    });
     convoList.appendChild(el);
   }
 }
@@ -316,6 +395,7 @@ async function openThread(id, mark) {
   document.getElementById("thread-name").textContent = convo.displayName;
   document.getElementById("thread-number").textContent = convo.address;
   document.getElementById("thread-avatar").outerHTML = avatarHtml(convo.displayName, convo.avatarColor, convo.photoUrl).replace("class=\"avatar\"", "class=\"avatar\" id=\"thread-avatar\"");
+  saveContactBtn.hidden = !canSaveContact(convo);
   renderConversations(searchInput.value);
   const msgs = await api(`/api/v1/conversations/${id}/messages?limit=50`);
   renderMessages(msgs.slice().reverse());
@@ -531,7 +611,8 @@ document.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === "Escape") {
     if (!helpModal.hidden) { closeHelp(); e.preventDefault(); return; }
-    if (!convoMenu.hidden) { hideConvoMenu(); e.preventDefault(); return; }
+    if (!themeModal.hidden) { closeTheme(); e.preventDefault(); return; }
+    if (!contactModal.hidden) { closeContactModal(); e.preventDefault(); return; }
     if (!newModal.hidden) { closeNewModal(); e.preventDefault(); return; }
     if (document.activeElement === composeText) { composeText.blur(); return; }
     if (document.activeElement === searchInput) { searchInput.blur(); return; }
@@ -658,6 +739,128 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function canSaveContact(convo) {
+  if (!convo || convo.isGroup) return false;
+  if (convo.contactId) return false;
+  const number = threadNumber(convo);
+  return !!number;
+}
+
+function threadNumber(convo) {
+  const fromRecipients = (convo?.recipients || []).map((n) => n.trim()).filter(Boolean);
+  if (fromRecipients.length === 1) return fromRecipients[0];
+  const address = (convo?.address || "").trim();
+  if (!address || address.includes(",")) return "";
+  return address;
+}
+
+function setContactMode(mode) {
+  contactSaveMode = mode;
+  document.querySelectorAll("#contact-mode button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.contactMode === mode);
+  });
+  document.getElementById("contact-new-fields").hidden = mode !== "new";
+  document.getElementById("contact-existing-fields").hidden = mode !== "existing";
+  const nameInput = document.getElementById("contact-name");
+  if (mode === "new") {
+    nameInput.required = true;
+    nameInput.focus();
+  } else {
+    nameInput.required = false;
+    document.getElementById("contact-existing-search").focus();
+    loadExistingContacts(document.getElementById("contact-existing-search").value);
+  }
+}
+
+function openContactModal() {
+  const convo = conversations.find((c) => c.id === selectedId);
+  const number = threadNumber(convo);
+  if (!number) return;
+  contactModalNumber = number;
+  selectedExistingContact = null;
+  document.getElementById("contact-number-label").textContent = number;
+  const nameGuess = convo.displayName && !looksLikeNumber(convo.displayName) ? convo.displayName : "";
+  document.getElementById("contact-name").value = nameGuess;
+  document.getElementById("contact-existing-search").value = "";
+  document.getElementById("contact-existing-list").innerHTML = "";
+  setContactMode("new");
+  contactModal.hidden = false;
+}
+
+function closeContactModal() {
+  contactModal.hidden = true;
+  selectedExistingContact = null;
+}
+
+async function loadExistingContacts(q) {
+  const list = await api("/api/v1/contacts?q=" + encodeURIComponent(q || ""));
+  const box = document.getElementById("contact-existing-list");
+  box.innerHTML = "";
+  if (!list.length) {
+    box.innerHTML = "<p class='muted' style='padding:8px'>No matching contacts</p>";
+    return;
+  }
+  for (const c of list) {
+    const el = document.createElement("div");
+    el.className = "contact" + (selectedExistingContact?.id === c.id ? " selected" : "");
+    el.innerHTML = `${avatarHtml(c.name, c.avatarColor, c.photoUrl)}<div><strong>${escapeHtml(c.name)}</strong><div class="muted">${escapeHtml(c.number)}</div></div>`;
+    el.addEventListener("click", () => {
+      selectedExistingContact = c;
+      [...box.children].forEach((n) => n.classList.remove("selected"));
+      el.classList.add("selected");
+    });
+    box.appendChild(el);
+  }
+}
+
+saveContactBtn.addEventListener("click", openContactModal);
+document.getElementById("close-contact").addEventListener("click", closeContactModal);
+contactModal.addEventListener("click", (e) => {
+  if (e.target === contactModal) closeContactModal();
+});
+document.getElementById("contact-mode").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-contact-mode]");
+  if (!btn) return;
+  setContactMode(btn.dataset.contactMode);
+});
+document.getElementById("contact-existing-search").addEventListener("input", () => {
+  loadExistingContacts(document.getElementById("contact-existing-search").value);
+});
+document.getElementById("save-contact-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const number = contactModalNumber;
+  if (!number) return;
+  try {
+    if (contactSaveMode === "new") {
+      const name = document.getElementById("contact-name").value.trim();
+      if (!name) {
+        alert("Enter a name for this contact.");
+        return;
+      }
+      await api("/api/v1/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, number }),
+      });
+    } else {
+      if (!selectedExistingContact) {
+        alert("Pick an existing contact to add this number to.");
+        return;
+      }
+      await api("/api/v1/contacts/" + encodeURIComponent(selectedExistingContact.id) + "/phones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number }),
+      });
+    }
+    closeContactModal();
+    await loadInbox();
+    if (selectedId) await openThread(selectedId, false);
+  } catch (err) {
+    alert(err.message || "Could not save that contact.");
+  }
+});
+
 function linkify(text) {
   const escaped = escapeHtml(text);
   return escaped.replace(/((?:https?:\/\/|www\.)[^\s<]+)/gi, (url) => {
@@ -667,43 +870,6 @@ function linkify(text) {
     return `<a href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>`;
   });
 }
-
-let menuThreadId = null;
-function showConvoMenu(id, x, y) {
-  menuThreadId = id;
-  convoMenu.hidden = false;
-  const pad = 8;
-  const w = convoMenu.offsetWidth || 200;
-  const h = convoMenu.offsetHeight || 48;
-  convoMenu.style.left = Math.min(x, window.innerWidth - w - pad) + "px";
-  convoMenu.style.top = Math.min(y, window.innerHeight - h - pad) + "px";
-}
-function hideConvoMenu() {
-  convoMenu.hidden = true;
-  menuThreadId = null;
-}
-document.addEventListener("click", () => hideConvoMenu());
-window.addEventListener("blur", hideConvoMenu);
-menuDelete.addEventListener("click", async (e) => {
-  e.stopPropagation();
-  const id = menuThreadId;
-  hideConvoMenu();
-  const convo = conversations.find((c) => c.id === id);
-  const name = convo?.displayName || "this conversation";
-  if (!id || !confirm(`Delete the conversation with ${name}? This removes it from the phone too.`)) return;
-  try {
-    await api("/api/v1/conversations/" + encodeURIComponent(id), { method: "DELETE" });
-    if (selectedId === id) {
-      selectedId = null;
-      threadPanel.hidden = true;
-      emptyThread.hidden = false;
-      appView.classList.remove("thread-open");
-    }
-    await loadInbox();
-  } catch (err) {
-    alert(err.message || "Could not delete that conversation.");
-  }
-});
 
 function formatTime(ts) {
   if (!ts) return "";

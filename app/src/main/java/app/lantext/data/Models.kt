@@ -42,6 +42,18 @@ enum class GateReason {
     LISTENING,
 }
 
+data class PermissionState(
+    val sms: Boolean = false,
+    val contacts: Boolean = false,
+    val notifications: Boolean = false,
+    val nearbyDevices: Boolean = false,
+    val location: Boolean = false,
+    val nearbyDevicesRequired: Boolean = false,
+) {
+    val allGranted: Boolean
+        get() = sms && contacts && notifications && nearbyDevices && location
+}
+
 data class GatewaySnapshot(
     val enabled: Boolean = false,
     val listening: Boolean = false,

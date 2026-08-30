@@ -4,11 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.lantext.LanTextApp
+import android.os.Build
 import app.lantext.data.AppSettings
 import app.lantext.data.GatewaySnapshot
 import app.lantext.data.PairedDevice
 import app.lantext.data.PendingPairing
+import app.lantext.data.PermissionState
 import app.lantext.net.WifiGate
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -28,6 +31,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
+    )
+    private val _permissions = MutableStateFlow(readPermissions())
+    val permissions: StateFlow<PermissionState> = _permissions
+
+    fun refreshPermissions() {
+        _permissions.value = readPermissions()
+    }
+
+    private fun readPermissions(): PermissionState = PermissionState(
+        sms = WifiGate.hasSmsPermission(app),
+        contacts = WifiGate.hasContactsPermission(app),
+        notifications = WifiGate.hasNotificationPermission(app),
+        nearbyDevices = WifiGate.hasNearbyDevicesPermission(app),
+        location = WifiGate.hasLocationPermission(app),
+        nearbyDevicesRequired = Build.VERSION.SDK_INT >= 33,
     )
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
@@ -63,9 +81,4 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun currentSsid(): String? = WifiGate.currentSsid(app)
-
-    fun hasSms(): Boolean = WifiGate.hasSmsPermission(app)
-    fun hasContacts(): Boolean = WifiGate.hasContactsPermission(app)
-    fun hasNotifications(): Boolean = WifiGate.hasNotificationPermission(app)
-    fun hasWifiPerm(): Boolean = WifiGate.hasNearbyWifiPermission(app)
 }

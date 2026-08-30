@@ -1,0 +1,7 @@
+Themes, contacts from a thread, and clearer permissions.
+
+• Appearance: Auto / Light / Dark plus palettes
+• Save an unknown number as a contact, or add it to someone you already know
+• In-app explanation of SMS, contacts, notifications, Nearby devices, and location
+• Missing permissions open a Grant all popup instead of a silent button
+• Conversation delete removed from the web UI (Android only allows the default SMS app)

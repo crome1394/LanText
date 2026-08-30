@@ -73,9 +73,13 @@ object WifiGate {
         return read == PackageManager.PERMISSION_GRANTED && send == PackageManager.PERMISSION_GRANTED
     }
 
-    fun hasContactsPermission(context: Context): Boolean =
-        ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) ==
+    fun hasContactsPermission(context: Context): Boolean {
+        val read = ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) ==
             PackageManager.PERMISSION_GRANTED
+        val write = ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+        return read && write
+    }
 
     fun hasNotificationPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < 33) return true
@@ -83,17 +87,18 @@ object WifiGate {
             PackageManager.PERMISSION_GRANTED
     }
 
-    fun hasNearbyWifiPermission(context: Context): Boolean {
-        val nearby = if (Build.VERSION.SDK_INT >= 33) {
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.NEARBY_WIFI_DEVICES) ==
-                PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-        val location = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+    fun hasLocationPermission(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        return nearby && location
+
+    fun hasNearbyDevicesPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return true
+        return ContextCompat.checkSelfPermission(context, android.Manifest.permission.NEARBY_WIFI_DEVICES) ==
+            PackageManager.PERMISSION_GRANTED
     }
+
+    fun hasNearbyWifiPermission(context: Context): Boolean =
+        hasNearbyDevicesPermission(context) && hasLocationPermission(context)
 
     fun normalizeSsid(raw: String?): String? {
         val value = raw?.trim()?.trim('"').orEmpty()

@@ -4,8 +4,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-1F8A70.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8%2B-156B57.svg)](#build)
-[![F-Droid](https://img.shields.io/badge/F--Droid-ready-brightgreen.svg)](F-DROID.md)
-[![version](https://img.shields.io/badge/version-0.1.0-14201a.svg)](CHANGELOG.md)
+[![F-Droid](https://img.shields.io/badge/F--Droid-planned-156B57.svg)](F-DROID.md)
+[![version](https://img.shields.io/badge/version-0.2.0--dev-14201a.svg)](CHANGELOG.md)
+[![source](https://img.shields.io/badge/github-crome1394%2FLanText-1F8A70.svg)](https://github.com/crome1394/LanText)
 
 ![LanText — SMS from your computer, never leaves your Wi-Fi](fastlane/metadata/android/en-US/images/featureGraphic.png)
 
@@ -55,14 +56,16 @@ trusted.
 - Paste, drop, or attach a picture — it goes out as MMS through the carrier
 - Links in messages are clickable
 - Desktop notifications when a text arrives
-- Right-click (or long-press) a conversation to delete it
+- Save an unknown number as a contact, or add it to someone you already know
+- Appearance: Auto, Light, or Dark, plus palettes
 - A home-screen widget flips web access on and off without opening the app
 
 ## How it works
 
 1. Install LanText on Android 8 or newer.
-2. Grant SMS, contacts, notifications, and nearby-Wi-Fi (Android 12 and older
-   also need location — **only** so the OS will reveal the network name).
+2. Grant SMS, contacts, notifications, and Nearby devices (Android 12 and
+   older also need location — **only** so the OS will reveal the Wi-Fi name,
+   not GPS).
 3. Add your home Wi-Fi to the allowlist and turn web access on.
 4. On a computer on that same network, open the HTTPS URL shown in the app
    (or scan the QR code).
@@ -102,9 +105,8 @@ moment the screen turns off.
 This is a deliberate trade: Fossify (or whoever you chose) stays in charge of
 the SMS database.
 
-- **Mark-as-read** and **delete** in the system store may be denied by
-  Android. The web UI still offers delete; if the provider refuses, you will
-  see a message pointing you at the default app.
+- **Mark-as-read** in the system store may be denied by Android. Delete
+  conversations in the default SMS app on the phone.
 - **Incoming MMS** is stored by the default messenger. LanText can show it
   once it is on the device.
 - **Outgoing MMS** needs mobile data, even if you are on Wi-Fi. That is an
@@ -135,38 +137,30 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 ./gradlew :app:assembleRelease        # app.lantext — sign it yourself
 ```
 
-- minSdk 26 (Android 8), targetSdk 36, version **0.1.0** (`versionCode` 1)
+- minSdk 26 (Android 8), targetSdk 36
+- Current development version: **0.2.0** (`versionCode` 2), unreleased
+- Latest git tag: **v0.1.0**
 - Application id: `app.lantext`
 - License: [Apache 2.0](LICENSE)
 
-Release signing is up to you. This repository does not contain a keystore.
+Release APKs are **developer-signed** (unsigned Gradle output, then
+`apksigner` from Build Tools 34). The keystore is not in this repository.
+See [RELEASE.md](RELEASE.md).
 
 ## F-Droid
 
-Store listing files live in
+Not listed yet. Store metadata lives in
 [`fastlane/metadata/android/en-US/`](fastlane/metadata/android/en-US/).
-See [F-DROID.md](F-DROID.md) for inclusion notes and a `fdroiddata` template.
+The planned packaging is developer-signed reproducible builds. Details and
+the `fdroiddata` recipe: [F-DROID.md](F-DROID.md).
 
-Tag releases as `v0.1.0` (matching `versionName`) so F-Droid can follow tags.
+Tag releases as `v<versionName>` (semver) so F-Droid can follow tags.
 
 ## Contribute
 
 Build notes, review expectations, and how to cut a release:
-[CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
-
-## Pushing to GitHub
-
-This folder is a git repo with `main` and tag `v0.1.0`. There is no remote
-yet (no SSH key was available when it was prepared). After you have a key:
-
-```bash
-git remote add origin git@github.com:YOU/lantext.git
-git push -u origin main
-git push origin v0.1.0
-```
-
-Replace `YOU/lantext` with the GitHub user and repository you create. Set
-`user.email` locally if GitHub should link the commits to your account.
+[CONTRIBUTING.md](CONTRIBUTING.md), [RELEASE.md](RELEASE.md).
+Security reports: [SECURITY.md](SECURITY.md).
 
 ## License
 

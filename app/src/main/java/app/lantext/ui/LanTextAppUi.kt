@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -46,11 +47,14 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.lantext.data.AppSettings
 import app.lantext.data.GateReason
 import app.lantext.data.GatewaySnapshot
 import app.lantext.data.PairedDevice
 import app.lantext.data.PendingPairing
+import app.lantext.data.PermissionState
 import java.text.DateFormat
 import java.util.Date
 
@@ -64,10 +68,7 @@ fun LanTextAppUi(
     pending: PendingPairing?,
     devices: List<PairedDevice>,
     currentSsid: String?,
-    hasSms: Boolean,
-    hasContacts: Boolean,
-    hasNotifications: Boolean,
-    hasWifiPerm: Boolean,
+    permissions: PermissionState,
     onRequestPermissions: () -> Unit,
     onFinishOnboarding: () -> Unit,
     onEnabled: (Boolean) -> Unit,
@@ -79,19 +80,21 @@ fun LanTextAppUi(
     onRevoke: (String) -> Unit,
 ) {
     var dest by remember { mutableStateOf(Dest.Home) }
+    if (!permissions.allGranted) {
+        PermissionRationaleDialog(
+            state = permissions,
+            onGrantAll = onRequestPermissions,
+        )
+    }
     if (!settings.onboardingDone) {
         OnboardingScreen(
-            hasSms = hasSms,
-            hasContacts = hasContacts,
-            hasNotifications = hasNotifications,
-            hasWifiPerm = hasWifiPerm,
-            onRequestPermissions = onRequestPermissions,
+            permissions = permissions,
             onDone = onFinishOnboarding,
         )
         return
     }
 
-    if (pending != null) {
+    if (pending != null && permissions.allGranted) {
         AlertDialog(
             onDismissRequest = { onDeny(pending.id) },
             title = { Text("Pair this computer?") },
@@ -137,7 +140,6 @@ fun LanTextAppUi(
                 onPaired = { dest = Dest.Paired },
                 onAbout = { dest = Dest.About },
                 onAddCurrent = onAddCurrent,
-                onRequestPermissions = onRequestPermissions,
             )
             Dest.Networks -> NetworksScreen(
                 modifier = Modifier.padding(padding),
@@ -159,15 +161,10 @@ fun LanTextAppUi(
 
 @Composable
 private fun OnboardingScreen(
-    hasSms: Boolean,
-    hasContacts: Boolean,
-    hasNotifications: Boolean,
-    hasWifiPerm: Boolean,
-    onRequestPermissions: () -> Unit,
+    permissions: PermissionState,
     onDone: () -> Unit,
 ) {
-    val ready = hasSms && hasContacts && hasNotifications && hasWifiPerm
-    LaunchedEffect(ready) { if (ready) onDone() }
+    LaunchedEffect(permissions.allGranted) { if (permissions.allGranted) onDone() }
     Column(
         Modifier
             .fillMaxSize()
@@ -178,27 +175,61 @@ private fun OnboardingScreen(
         Text("Text from your computer — only at home", style = MaterialTheme.typography.headlineMedium)
         Text("LanText is a companion for Fossify Messages, Google Messages, or any other SMS app. It never replaces your default messenger.")
         Text("It serves a private web page on Wi-Fi you choose. Nothing is sent to the internet.")
-        PermissionLine("SMS", "Read history and send texts through your carrier.", hasSms)
-        PermissionLine("Contacts", "Show names instead of numbers.", hasContacts)
-        PermissionLine("Notifications", "Tell you when a computer wants to pair, and keep the LAN server alive.", hasNotifications)
-        PermissionLine("Nearby Wi-Fi and location", "Read the Wi-Fi name so the server only runs on networks you allow. Location is never sent anywhere; it is only how Android exposes the SSID.", hasWifiPerm)
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onRequestPermissions, modifier = Modifier.fillMaxWidth()) {
-            Text("Grant permissions")
-        }
-        if (ready) {
-            Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Continue") }
+        Text("A prompt explains each permission Android requires. Nothing those permissions unlock is uploaded.")
+    }
+}
+
+@Composable
+private fun PermissionRationaleDialog(
+    state: PermissionState,
+    onGrantAll: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+    ) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Permissions LanText needs", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Android will show a system prompt for each of these. Nothing they unlock is uploaded. Nearby devices and location are only so the inbox can read the Wi-Fi name.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                permissionRationales(state).forEach { item ->
+                    PermissionLine(item.title, item.body, item.granted)
+                }
+                Spacer(Modifier.height(4.dp))
+                Button(onClick = onGrantAll, modifier = Modifier.fillMaxWidth()) {
+                    Text("Grant all")
+                }
+                Text(
+                    "If Android does not ask again, enable them in Settings → Apps → LanText → Permissions.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun PermissionLine(title: String, body: String, granted: Boolean) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(body) },
-        trailingContent = { Text(if (granted) "On" else "Needed", color = MaterialTheme.colorScheme.primary) },
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(
+                if (granted) "On" else "Needed",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        Text(body, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable
@@ -212,7 +243,6 @@ private fun HomeScreen(
     onPaired: () -> Unit,
     onAbout: () -> Unit,
     onAddCurrent: () -> Unit,
-    onRequestPermissions: () -> Unit,
 ) {
     Column(
         modifier
@@ -231,11 +261,6 @@ private fun HomeScreen(
                     Switch(checked = snapshot.enabled, onCheckedChange = onEnabled)
                 }
                 AssistChip(onClick = {}, label = { Text(snapshot.ssid ?: currentSsid ?: "Not on Wi-Fi") })
-                if (snapshot.reason == GateReason.MISSING_SMS_PERMISSION ||
-                    snapshot.reason == GateReason.MISSING_NOTIFICATION_PERMISSION
-                ) {
-                    Button(onClick = onRequestPermissions) { Text("Grant missing permissions") }
-                }
                 if (snapshot.enabled && snapshot.reason == GateReason.NO_NETWORK_SELECTED && currentSsid != null) {
                     Button(onClick = onAddCurrent) { Text("Allow this network ($currentSsid)") }
                 }
@@ -293,7 +318,7 @@ private fun HomeScreen(
         OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.Info, null)
             Spacer(Modifier.size(8.dp))
-            Text("About and privacy")
+            Text("About, privacy, and permissions")
         }
     }
 }
@@ -390,10 +415,73 @@ private fun AboutScreen(modifier: Modifier) {
         Text("LanText is a local-network companion. It does not replace Fossify Messages or any other SMS app.")
         Text("Messages stay on your phone and travel only across the Wi-Fi you allow, over HTTPS, to computers you have paired.")
         Text("There is no account, no cloud, no analytics, and no crash reporter.")
-        Text("Mark-as-read and delete in the system inbox may be limited because LanText is not the default SMS app. Your phone messenger remains the source of truth.")
+        Text("Mark-as-read in the system inbox may be limited because LanText is not the default SMS app. Your phone messenger remains the source of truth. Delete conversations there, not here.")
         Text("On Xiaomi, Huawei, Samsung, and similar devices, set battery usage to Unrestricted so the server is not killed while you are at home.")
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text("Why these permissions", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Android shows a system prompt for each of these. LanText does not send the data they unlock to anyone else.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Nearby devices", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(NEARBY_DEVICES_WHY, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Location", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(LOCATION_WHY, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        PermissionExplain(title = "SMS", body = SMS_WHY)
+        PermissionExplain(title = "Contacts", body = CONTACTS_WHY)
+        PermissionExplain(title = "Notifications", body = NOTIFICATIONS_WHY)
+        PermissionExplain(
+            title = "Network",
+            body = "Accept HTTPS connections from a browser on the same Wi-Fi. There is no LanText cloud. The listener binds only to this phone’s Wi-Fi address, and only on networks you allow.",
+        )
     }
 }
+
+@Composable
+private fun PermissionExplain(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(body, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private data class PermissionRationale(
+    val title: String,
+    val body: String,
+    val granted: Boolean,
+)
+
+private fun permissionRationales(state: PermissionState): List<PermissionRationale> = buildList {
+    add(PermissionRationale("SMS", SMS_WHY, state.sms))
+    add(PermissionRationale("Contacts", CONTACTS_WHY, state.contacts))
+    add(PermissionRationale("Notifications", NOTIFICATIONS_WHY, state.notifications))
+    if (state.nearbyDevicesRequired) {
+        add(PermissionRationale("Nearby devices", NEARBY_DEVICES_WHY, state.nearbyDevices))
+    }
+    add(PermissionRationale("Location", LOCATION_WHY, state.location))
+}
+
+private const val SMS_WHY =
+    "Read the system message store so the computer inbox matches your phone, and send SMS or picture messages through your carrier. Fossify, Google Messages, or whatever you already use stays the default app."
+private const val CONTACTS_WHY =
+    "Show names instead of numbers, and let you save an unknown number or add a second phone to someone you already know from the computer. Contacts stay on this phone."
+private const val NOTIFICATIONS_WHY =
+    "Tell you when a computer wants to pair, and keep a silent ongoing notification while web access is running. Android requires that notification for a foreground service."
+private const val NEARBY_DEVICES_WHY =
+    "Android 13 and newer labels this Nearby devices. It is how the phone will tell an app the name of the Wi-Fi you are on. LanText does not search for headphones, speakers, or other phones. It only uses that network name so the computer inbox stays off except on Wi-Fi you allow."
+private const val LOCATION_WHY =
+    "On Android 12 and older, the Wi-Fi name is gated behind location permission. LanText still asks for it so the allowlist works on every version. It does not read GPS, maps, cell towers, or your street address. Coordinates are never stored and never sent."
 
 private fun statusText(snapshot: GatewaySnapshot): String = when {
     !snapshot.enabled -> "Off"

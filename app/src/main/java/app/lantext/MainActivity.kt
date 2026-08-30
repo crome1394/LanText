@@ -19,7 +19,10 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { viewModel.snapshot.value.let { /* re-evaluate via settings flow */ } }
+    ) {
+        viewModel.refreshPermissions()
+        LanTextApp.instance.gateway.onNetworkChanged()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,16 +33,14 @@ class MainActivity : ComponentActivity() {
                 val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
                 val pending by viewModel.pendingPairing.collectAsStateWithLifecycle()
                 val devices by viewModel.devices.collectAsStateWithLifecycle()
+                val permissions by viewModel.permissions.collectAsStateWithLifecycle()
                 LanTextAppUi(
                     settings = settings,
                     snapshot = snapshot,
                     pending = pending,
                     devices = devices,
                     currentSsid = viewModel.currentSsid(),
-                    hasSms = viewModel.hasSms(),
-                    hasContacts = viewModel.hasContacts(),
-                    hasNotifications = viewModel.hasNotifications(),
-                    hasWifiPerm = viewModel.hasWifiPerm(),
+                    permissions = permissions,
                     onRequestPermissions = { requestNeeded() },
                     onFinishOnboarding = viewModel::finishOnboarding,
                     onEnabled = viewModel::setEnabled,
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        viewModel.refreshPermissions()
         LanTextApp.instance.gateway.onNetworkChanged()
     }
 
@@ -65,6 +67,7 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.SEND_SMS,
             Manifest.permission.RECEIVE_SMS,
             Manifest.permission.READ_CONTACTS,
+            Manifest.permission.WRITE_CONTACTS,
         )
         if (Build.VERSION.SDK_INT >= 33) {
             needed += Manifest.permission.POST_NOTIFICATIONS

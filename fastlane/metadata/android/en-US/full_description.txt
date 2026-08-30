@@ -13,6 +13,8 @@
 <li>Enter to send, Shift+Enter for a new line</li>
 <li>Paste, drop, or attach a picture — sent as MMS</li>
 <li>Clickable links, desktop notifications, live updates</li>
+<li>Light, dark, and Auto appearance, plus color palettes</li>
+<li>Save unknown numbers as contacts, or add a second number to someone you already know</li>
 </ul>
 
 <p><b>On the phone</b></p>
@@ -24,10 +26,10 @@
 </ul>
 
 <p><b>Privacy</b></p>
-<p>No analytics, no crash reporting, no ads. Location permission is used only so Android will reveal the Wi-Fi name for the allowlist — coordinates are never read or sent.</p>
+<p>No analytics, no crash reporting, no ads. Location and Nearby devices are used only so Android will reveal the Wi-Fi name for the allowlist — not GPS, and not a scan for other hardware. Coordinates are never read or sent.</p>
 
 <p><b>Not on Google Play</b></p>
 <p>Play rejects SMS permissions unless an app is the default messenger. LanText refuses to take that role, so it is built for F-Droid and sideload.</p>
 
 <p><b>Limits</b></p>
-<p>Because LanText is not the default SMS app, Android may block mark-as-read and delete in the system database. Incoming MMS is stored by your default messenger; LanText can display it once it is on the device. Outgoing MMS still needs mobile data, even on Wi-Fi.</p>
+<p>Because LanText is not the default SMS app, Android may block mark-as-read in the system database. Delete conversations in your default messenger. Incoming MMS is stored by that app; LanText can display it once it is on the device. Outgoing MMS still needs mobile data, even on Wi-Fi.</p>
