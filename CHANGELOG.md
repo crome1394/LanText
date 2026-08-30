@@ -10,6 +10,11 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Fixed
+
+- Home-screen pairing URL and QR use the phone's real Wi-Fi IPv4. The
+  generic `192.168.1.42` example stays on the About screen only.
+
 ## [0.2.2] — 2026-08-30
 
 Sideload build for testers. Same developer-signed GitHub release as Point Forecast.

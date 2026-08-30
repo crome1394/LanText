@@ -2,6 +2,7 @@ package app.lantext.net
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -26,10 +27,14 @@ class WifiMonitor(
             LocationAwareCallback()
         } else {
             object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) = reevaluate()
-                override fun onLost(network: Network) = onWifiLost()
+                override fun onAvailable(network: Network) = onWifiAvailable(network)
+                override fun onLost(network: Network) = onWifiLost(network)
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                     onCaps(caps)
+                }
+                override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
+                    WifiGate.rememberLink(network, lp)
+                    reevaluate()
                 }
             }
         }
@@ -38,10 +43,14 @@ class WifiMonitor(
     private inner class LocationAwareCallback : ConnectivityManager.NetworkCallback(
         FLAG_INCLUDE_LOCATION_INFO,
     ) {
-        override fun onAvailable(network: Network) = reevaluate()
-        override fun onLost(network: Network) = onWifiLost()
+        override fun onAvailable(network: Network) = onWifiAvailable(network)
+        override fun onLost(network: Network) = onWifiLost(network)
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
             onCaps(caps)
+        }
+        override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
+            WifiGate.rememberLink(network, lp)
+            reevaluate()
         }
     }
 
@@ -79,7 +88,13 @@ class WifiMonitor(
         reevaluate()
     }
 
-    private fun onWifiLost() {
+    private fun onWifiAvailable(network: Network) {
+        cm.getLinkProperties(network)?.let { WifiGate.rememberLink(network, it) }
+        reevaluate()
+    }
+
+    private fun onWifiLost(network: Network) {
+        WifiGate.forgetLink(network)
         WifiGate.remember(null)
         reevaluate()
     }

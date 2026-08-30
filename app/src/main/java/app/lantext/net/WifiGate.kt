@@ -3,6 +3,7 @@ package app.lantext.net
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
@@ -12,7 +13,6 @@ import androidx.core.content.ContextCompat
 import app.lantext.data.AppSettings
 import app.lantext.data.GateReason
 import app.lantext.data.SettingsRepository
-import app.lantext.util.PrivateNetwork
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -20,16 +20,26 @@ object WifiGate {
     @Volatile var lastSsid: String? = null
         private set
 
+    @Volatile private var lastLinkNetwork: Network? = null
+    @Volatile private var lastLink: LinkProperties? = null
+
     fun remember(ssid: String?) {
         lastSsid = normalizeSsid(ssid)
     }
 
-    fun isOnWifi(context: Context): Boolean {
-        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
-        val network = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(network) ?: return false
-        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    fun rememberLink(network: Network, link: LinkProperties) {
+        lastLinkNetwork = network
+        lastLink = link
     }
+
+    fun forgetLink(network: Network) {
+        if (lastLinkNetwork == network) {
+            lastLinkNetwork = null
+            lastLink = null
+        }
+    }
+
+    fun isOnWifi(context: Context): Boolean = wifiStaNetwork(context) != null
 
     fun currentSsid(context: Context): String? {
         if (!isOnWifi(context)) {
@@ -52,17 +62,23 @@ object WifiGate {
     }
 
     fun wifiIpv4(context: Context): String? {
-        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
-        val network = cm.activeNetwork ?: return null
-        val caps = cm.getNetworkCapabilities(network) ?: return null
-        if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
-        val link = cm.getLinkProperties(network) ?: return null
-        val fromLink = link.linkAddresses
-            .mapNotNull { it.address as? Inet4Address }
-            .map { it.hostAddress }
-            .firstOrNull { PrivateNetwork.isPrivateHost(it) }
-        if (fromLink != null) return fromLink
-        return firstPrivateIpv4()
+        val wm = context.getSystemService(WifiManager::class.java)
+        @Suppress("DEPRECATION")
+        val dhcp = wm?.dhcpInfo
+        val dhcpHost = WifiIpv4.fromLittleEndian(dhcp?.ipAddress ?: 0)
+        val gatewayHost = WifiIpv4.fromLittleEndian(dhcp?.gateway ?: 0)
+        @Suppress("DEPRECATION")
+        val connectionHost = WifiIpv4.fromLittleEndian(wm?.connectionInfo?.ipAddress ?: 0)
+
+        val candidates = mutableListOf<Ipv4Candidate>()
+        lastLink?.let { addLinkAddresses(it, candidates) }
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        wifiStaNetwork(context)?.let { net ->
+            cm?.getLinkProperties(net)?.let { addLinkAddresses(it, candidates) }
+        }
+        addWlanInterfaceAddresses(candidates)
+
+        return WifiIpv4.select(candidates, dhcpHost ?: connectionHost, gatewayHost)
     }
 
     fun evaluate(context: Context, settings: AppSettings): GateReason {
@@ -133,19 +149,63 @@ object WifiGate {
         return context.getSystemService(WifiManager::class.java)?.connectionInfo
     }
 
-    private fun firstPrivateIpv4(): String? {
-        val interfaces = NetworkInterface.getNetworkInterfaces() ?: return null
+    @Suppress("DEPRECATION")
+    private fun wifiStaNetwork(context: Context): Network? {
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
+        val wifi = cm.allNetworks.filter { net ->
+            val caps = cm.getNetworkCapabilities(net) ?: return@filter false
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                !caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        }
+        return wifi.maxByOrNull { net ->
+            val caps = cm.getNetworkCapabilities(net)
+            var score = 0
+            if (caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true) score += 1
+            if (caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) score += 1
+            score
+        } ?: run {
+            val active = cm.activeNetwork ?: return null
+            val caps = cm.getNetworkCapabilities(active) ?: return null
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            ) {
+                active
+            } else {
+                null
+            }
+        }
+    }
+
+    private fun addLinkAddresses(link: LinkProperties, out: MutableList<Ipv4Candidate>) {
+        val iface = link.interfaceName
+        for (la in link.linkAddresses) {
+            val v4 = la.address as? Inet4Address ?: continue
+            val host = v4.hostAddress ?: continue
+            out += Ipv4Candidate(host, la.prefixLength, iface)
+        }
+    }
+
+    private fun addWlanInterfaceAddresses(out: MutableList<Ipv4Candidate>) {
+        val interfaces = NetworkInterface.getNetworkInterfaces() ?: return
         for (iface in interfaces) {
             if (!iface.isUp || iface.isLoopback) continue
-            val name = iface.name.lowercase()
-            if (!name.startsWith("wlan") && !name.startsWith("ap") && !name.startsWith("wifi")) continue
+            val name = iface.name
+            if (!WifiIpv4.isStaIface(name)) continue
             for (addr in iface.inetAddresses) {
                 val v4 = addr as? Inet4Address ?: continue
                 val host = v4.hostAddress ?: continue
-                if (PrivateNetwork.isPrivateHost(host)) return host
+                out += Ipv4Candidate(host, prefixFor(v4, iface), name)
             }
         }
-        return null
+    }
+
+    private fun prefixFor(address: Inet4Address, iface: NetworkInterface): Int {
+        val width = iface.interfaceAddresses
+            .firstOrNull { it.address == address }
+            ?.networkPrefixLength
+            ?.toInt()
+        return width ?: 24
     }
 }
 
