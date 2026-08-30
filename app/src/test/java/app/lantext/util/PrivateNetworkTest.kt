@@ -7,7 +7,7 @@ import org.junit.Test
 class PrivateNetworkTest {
     @Test
     fun rfc1918AndLoopbackArePrivate() {
-        assertTrue(PrivateNetwork.isPrivateHost("10.74.10.148"))
+        assertTrue(PrivateNetwork.isPrivateHost("10.0.0.20"))
         assertTrue(PrivateNetwork.isPrivateHost("192.168.1.20"))
         assertTrue(PrivateNetwork.isPrivateHost("172.16.0.4"))
         assertTrue(PrivateNetwork.isPrivateHost("127.0.0.1"))

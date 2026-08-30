@@ -10,89 +10,288 @@
       height: 1920px;
       overflow: hidden;
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: #f3f6f4;
-      color: #14201a;
+      background: #0b1520;
+      color: #e6f1f7;
     }
-    .app { display: flex; flex-direction: column; }
-    header {
-      display: flex; align-items: center; gap: 20px;
-      padding: 28px 32px;
-      background: #fff;
-      border-bottom: 1px solid #d8e0db;
+    .app {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      height: 100%;
     }
-    .back { font-size: 48px; width: 56px; }
+    aside {
+      background: #132230;
+      border-right: 1px solid #243848;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .head, .thread-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 22px 20px;
+      border-bottom: 1px solid #243848;
+      flex-shrink: 0;
+    }
+    .head h1, .thread-head h2 { margin: 0; font-size: 28px; }
+    .muted { color: #8aa8b8; margin: 0; font-size: 20px; }
+    .head-actions { margin-left: auto; display: flex; gap: 10px; }
+    .icon {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: #1a2c3a; display: grid; place-items: center;
+      font-size: 22px; font-weight: 700;
+    }
+    .search { padding: 14px 16px; }
+    .search div {
+      border: 1px solid #243848; background: #0b1520;
+      border-radius: 14px; padding: 14px 16px; color: #8aa8b8; font-size: 22px;
+    }
+    .list { flex: 1; overflow: hidden; }
+    .convo {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 12px;
+      padding: 16px 18px;
+      align-items: center;
+    }
+    .convo.active { background: #0b1520; }
     .avatar {
-      width: 72px; height: 72px; border-radius: 50%;
-      background: #156B57; color: #fff;
-      display: grid; place-items: center; font-weight: 700; font-size: 28px;
+      width: 56px; height: 56px; border-radius: 50%;
+      display: grid; place-items: center;
+      color: #fff; font-weight: 700; font-size: 22px; overflow: hidden;
     }
-    h2 { margin: 0; font-size: 34px; }
-    .muted { margin: 4px 0 0; color: #5b6b63; font-size: 22px; }
+    .photo {
+      background: linear-gradient(160deg, #5b8fb8 0%, #1a4a66 100%);
+    }
+    .photo.alt { background: linear-gradient(160deg, #c4a574 0%, #6a4e32 100%); }
+    .name { font-weight: 650; font-size: 24px; }
+    .snippet {
+      color: #8aa8b8; font-size: 20px; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+    }
+    .when { color: #8aa8b8; font-size: 18px; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #38bdf8; display: inline-block; margin-left: 8px;
+    }
+    main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .save {
+      margin-left: auto;
+      border: 1px solid #243848;
+      background: #1a2c3a;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font-size: 20px;
+      white-space: nowrap;
+    }
     .messages {
-      flex: 1; padding: 32px; display: flex; flex-direction: column; gap: 16px;
-    }
-    .day { align-self: center; color: #5b6b63; font-size: 22px; margin: 8px 0; }
-    .bubble {
-      max-width: 72%;
+      flex: 1;
       padding: 20px 24px;
-      border-radius: 24px;
-      font-size: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 12px;
+      align-items: start;
+    }
+    .day {
+      color: #8aa8b8;
+      font-size: 18px;
+      padding-top: 10px;
+      text-align: left;
+    }
+    .bubble {
+      max-width: 100%;
+      padding: 16px 18px;
+      border-radius: 16px;
+      font-size: 22px;
       line-height: 1.35;
     }
-    .in { background: #e8eeea; align-self: flex-start; border-bottom-left-radius: 6px; }
-    .out { background: #1f8a70; color: #fff; align-self: flex-end; border-bottom-right-radius: 6px; }
-    .pic {
-      width: 420px; height: 280px; border-radius: 16px;
-      background:
-        linear-gradient(160deg, #87c4b3 0%, #1f8a70 40%, #0e3a31 100%);
-      margin-bottom: 10px;
+    .in { background: #1a2c3a; border-bottom-left-radius: 4px; }
+    .out {
+      background: #0369a1; color: #f0f9ff;
+      border-bottom-right-radius: 4px;
+      justify-self: end;
+      max-width: 85%;
     }
-    .meta { font-size: 18px; opacity: 0.75; margin-top: 8px; }
+    .pic {
+      width: 280px; height: 170px; border-radius: 12px;
+      margin-bottom: 8px;
+      background:
+        radial-gradient(circle at 30% 30%, #7dd3fc 0%, transparent 42%),
+        linear-gradient(160deg, #0e7490 0%, #0b1520 70%);
+    }
+    .meta { font-size: 16px; opacity: 0.7; margin-top: 6px; }
     .composer {
-      display: flex; gap: 12px; align-items: flex-end;
-      padding: 24px 28px 36px;
-      background: #fff; border-top: 1px solid #d8e0db;
+      display: flex; gap: 10px; align-items: flex-end;
+      padding: 16px 18px 28px;
+      border-top: 1px solid #243848; background: #132230;
     }
     .attach {
-      width: 72px; height: 72px; border-radius: 50%;
-      background: #f3f6f4; display: grid; place-items: center; font-size: 32px;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: #0b1520; display: grid; place-items: center; font-size: 24px;
     }
+    .compose-main { flex: 1; }
     .box {
-      flex: 1; border: 1px solid #d8e0db; background: #f3f6f4;
-      border-radius: 18px; padding: 22px 24px; color: #5b6b63; font-size: 28px;
+      border: 1px solid #243848; background: #0b1520; border-radius: 14px;
+      padding: 14px 16px; color: #8aa8b8; font-size: 22px;
     }
+    .hint { margin: 6px 2px 0; font-size: 16px; color: #8aa8b8; }
     .send {
-      background: #156B57; color: #fff; border-radius: 999px;
-      padding: 22px 28px; font-size: 28px; font-weight: 650;
+      background: #0e7490; color: #fff; border-radius: 999px;
+      padding: 14px 22px; font-weight: 650; font-size: 22px;
     }
   </style>
 </head>
 <body>
   <div class="app">
-    <header>
-      <div class="back">‹</div>
-      <div class="avatar">J</div>
-      <div>
-        <h2>Jordan</h2>
-        <p class="muted">+1 555 010 4420</p>
+    <aside>
+      <div class="head">
+        <div>
+          <h1>LanText</h1>
+          <p class="muted">Live</p>
+        </div>
+        <div class="head-actions">
+          <div class="icon">Aa</div>
+          <div class="icon">+</div>
+        </div>
       </div>
-    </header>
-    <div class="messages">
-      <div class="day">Today</div>
-      <div class="bubble in">On the trail. Signal is awful but the view is not.<div class="meta">10:02</div></div>
-      <div class="bubble out">Send a picture when you can.<div class="meta">10:04</div></div>
-      <div class="bubble in">
-        <div class="pic"></div>
-        From the ridge
-        <div class="meta">10:11</div>
+      <div class="search"><div>Search conversations  Ctrl+K</div></div>
+      <div class="list">
+        <div class="convo">
+          <div class="avatar photo"></div>
+          <div>
+            <div class="name">Maya Chen</div>
+            <div class="snippet">Trailhead parking is open at 7</div>
+          </div>
+          <div class="when">2:01 PM</div>
+        </div>
+        <div class="convo">
+          <div class="avatar" style="background:#0e7490">H</div>
+          <div>
+            <div class="name">Harbor Books</div>
+            <div class="snippet">Your hold is ready for pickup</div>
+          </div>
+          <div class="when">Aug 29</div>
+        </div>
+        <div class="convo">
+          <div class="avatar photo alt"></div>
+          <div>
+            <div class="name">Sam Ortega</div>
+            <div class="snippet">Bring the spare HDMI cable?</div>
+          </div>
+          <div class="when">Aug 28</div>
+        </div>
+        <div class="convo">
+          <div class="avatar" style="background:#5b3cc4">+</div>
+          <div>
+            <div class="name">+1 555 0194</div>
+            <div class="snippet">Saturday hours are 10–4 this week.</div>
+          </div>
+          <div class="when">Aug 27</div>
+        </div>
+        <div class="convo active">
+          <div class="avatar" style="background:#6d28d9">+</div>
+          <div>
+            <div class="name">+1 555 0177</div>
+            <div class="snippet">The astronomy talk is Thursday at 7.</div>
+          </div>
+          <div class="when">Aug 18</div>
+        </div>
+        <div class="convo">
+          <div class="avatar" style="background:#2e7d32">R</div>
+          <div>
+            <div class="name">Riverside Clinic</div>
+            <div class="snippet">Appointment reminder for Friday</div>
+          </div>
+          <div class="when">Aug 25</div>
+        </div>
+        <div class="convo">
+          <div class="avatar" style="background:#c2410c">+</div>
+          <div>
+            <div class="name">+1 555 0130</div>
+            <div class="snippet">Your table is confirmed for 6:30</div>
+          </div>
+          <div class="when">Aug 24</div>
+        </div>
+        <div class="convo">
+          <div class="avatar" style="background:#00838f">K</div>
+          <div>
+            <div class="name">Kai Nakamura</div>
+            <div class="snippet">See you at the ferry</div>
+          </div>
+          <div class="when">Aug 23</div>
+        </div>
+        <div class="convo">
+          <div class="avatar" style="background:#ad1457">+</div>
+          <div>
+            <div class="name">+1 555 0162</div>
+            <div class="snippet">Parcel left at the side door</div>
+          </div>
+          <div class="when">Aug 21</div>
+        </div>
       </div>
-      <div class="bubble out">That looks cold. Text me when you are down.<div class="meta">10:12</div></div>
-    </div>
-    <div class="composer">
-      <div class="attach">📎</div>
-      <div class="box">Message or paste a picture</div>
-      <div class="send">Send</div>
-    </div>
+    </aside>
+    <main>
+      <div class="thread-head">
+        <div class="avatar" style="background:#6d28d9">+</div>
+        <div>
+          <h2>+1 555 0177</h2>
+          <p class="muted">5550177</p>
+        </div>
+        <div class="save">Save contact</div>
+      </div>
+      <div class="messages">
+        <div class="row">
+          <div class="bubble in">The west lawn is closed Saturday for the lantern festival. East gate parking is open.<div class="meta">Jul 28</div></div>
+          <div class="day">Sun, Jul 28</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">Reminder: volunteer shift Sunday 9–12. Check in at the cedar kiosk.<div class="meta">Aug 2</div></div>
+          <div class="day">Sat, Aug 2</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">New trail map is up in the visitor barn. Paper copies by the door.<div class="meta">Aug 3</div></div>
+          <div class="day">Sun, Aug 3</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">Astronomy talk is Thursday at 7 on the observatory deck. Clear skies expected.<div class="meta">Aug 4</div></div>
+          <div class="day">Mon, Aug 4</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">
+            <div class="pic"></div>
+            Night sky from last week’s session.
+            <div class="meta">Aug 5</div>
+          </div>
+          <div class="day">Tue, Aug 5</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">The river loop reopens Friday. Stay on the marked path after rain.<div class="meta">Aug 11</div></div>
+          <div class="day">Tue, Aug 11</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">Saturday hours are 10–4 this week. The gift shop closes at 3:30.<div class="meta">Aug 14</div></div>
+          <div class="day">Fri, Aug 14</div>
+        </div>
+        <div class="row">
+          <div class="bubble in">The astronomy talk is Thursday at 7. Bring a chair if you have one.<div class="meta">Aug 18</div></div>
+          <div class="day">Tue, Aug 18</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="attach">📎</div>
+        <div class="compose-main">
+          <div class="box">Message or paste a picture</div>
+          <p class="hint">Enter to send · paste or drop a picture to attach · Shift+Enter for a new line</p>
+        </div>
+        <div class="send">Send</div>
+      </div>
+    </main>
   </div>
 </body>
 </html>

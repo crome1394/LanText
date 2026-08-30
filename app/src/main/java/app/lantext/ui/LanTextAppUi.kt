@@ -630,9 +630,9 @@ private const val GITHUB_URL = "https://github.com/crome1394/LanText"
 
 private val LAN_OPERATOR_NOTES = listOf(
     "The HTTPS certificate is created on this phone (ECDSA P-256). It is not signed by a public CA, so the browser warning is expected. Compare the SHA-256 fingerprint on the home screen with what the browser shows.",
-    "Use the IP URL from the home screen (for example https://10.74.10.93:8743). Names like lantext.local or pixel.lan are not advertised on the network, so they will not resolve unless you add them in DNS or /etc/hosts. Even then, the certificate only lists the Wi-Fi IP, so a hostname in the browser will fail the name check.",
+    "Use the IP URL from the home screen (for example https://192.168.1.42:8743). Names like lantext.local are not advertised on the network, so they will not resolve unless you add them in DNS or /etc/hosts. Even then, the certificate only lists the Wi-Fi IP, so a hostname in the browser will fail the name check.",
     "A DHCP reservation or static IP keeps the URL and QR stable when the phone reconnects.",
-    "If you already run Caddy, HAProxy, or OPNsense on the LAN, reverse-proxy to the phone’s IP and port and serve your own name (pixel.lan) with an internal CA. Keep that proxy on private addresses only. Pairing (PIN plus Approve) still applies. Do not port-forward this to the internet.",
+    "If you already run Caddy, HAProxy, or OPNsense on the LAN, reverse-proxy to the phone’s IP and port and serve lantext.local with an internal CA. Keep that proxy on private addresses only. Pairing (PIN plus Approve) still applies. Do not port-forward this to the internet.",
 )
 
 @Composable
