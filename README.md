@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-1F8A70.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8%2B-156B57.svg)](#build)
 [![F-Droid](https://img.shields.io/badge/F--Droid-planned-156B57.svg)](F-DROID.md)
-[![version](https://img.shields.io/badge/version-0.2.2-14201a.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.2.3-14201a.svg)](CHANGELOG.md)
 [![source](https://img.shields.io/badge/github-crome1394%2FLanText-1F8A70.svg)](https://github.com/crome1394/LanText)
 
 ![LanText — SMS from your computer, never leaves your Wi-Fi](fastlane/metadata/android/en-US/images/featureGraphic.png)
@@ -69,14 +69,15 @@ trusted.
    not GPS).
 3. Add your home Wi-Fi to the allowlist and turn web access on.
 4. On a computer on that same network, open the HTTPS URL shown in the app
-   (or scan the QR code).
+   (the phone's current Wi-Fi IPv4, or scan the QR code).
 5. Accept the self-signed certificate **after** checking the fingerprint on
    the phone.
 6. Enter the PIN, then tap **Approve** on the phone.
 
 The server binds only to the phone's Wi-Fi IPv4 address, on port **8743**
 by default (you can change it in the app), and only while you are on an
-allowed SSID. It is not exposed to the cellular network and it is not a
+allowed SSID. The home-screen URL and QR are that address, not a sample
+from About. It is not exposed to the cellular network and it is not a
 public website.
 
 ## Security
@@ -140,8 +141,8 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 ```
 
 - minSdk 26 (Android 8), targetSdk 36
-- Current version: **0.2.2** (`versionCode` 4)
-- Latest git tag: **v0.2.2**
+- Current version: **0.2.3** (`versionCode` 5)
+- Latest git tag: **v0.2.3**
 - Application id: `app.lantext`
 - License: [Apache 2.0](LICENSE)
 

@@ -1,0 +1,4 @@
+Pairing URL uses the phone's real Wi-Fi IP.
+
+• Home screen, QR, and HTTPS bind follow the Wi-Fi station address
+• About still shows a generic example URL only

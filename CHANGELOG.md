@@ -10,10 +10,16 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-08-30
+
+Sideload build for testers.
+
 ### Fixed
 
-- Home-screen pairing URL and QR use the phone's real Wi-Fi IPv4. The
-  generic `192.168.1.42` example stays on the About screen only.
+- Home-screen pairing URL, QR, and HTTPS bind use the phone's Wi-Fi
+  station address (DHCP / `wlan0`). About still uses a generic example
+  (`https://192.168.1.42:8743`); that was never meant to replace the
+  live pairing URL.
 
 ## [0.2.2] — 2026-08-30
 
@@ -95,6 +101,7 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.3]: #023--2026-08-30
 [0.2.2]: #022--2026-08-30
 [0.2.1]: #021--2026-08-30
 [0.2.0]: #020--2026-08-30
