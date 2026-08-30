@@ -23,9 +23,10 @@ shot() {
   echo "wrote $dest"
 }
 
-shot "$DIR/icon.html"        512  512  "$OUT/icon.png"
-shot "$DIR/feature.html"     1024 500  "$OUT/featureGraphic.png"
-shot "$DIR/phone-app.html"   1080 1920 "$OUT/phoneScreenshots/1.png"
-shot "$DIR/web-pair.html"    1080 1920 "$OUT/phoneScreenshots/2.png"
-shot "$DIR/web-thread.html"  1080 1920 "$OUT/phoneScreenshots/3.png"
-shot "$DIR/web-desktop.html" 1440 900  "$OUT/tenInchScreenshots/1.png"
+shot "$DIR/icon.html"              512  512  "$OUT/icon.png"
+shot "$DIR/feature.html"           1024 500  "$OUT/featureGraphic.png"
+shot "$DIR/phone-app.html"         1080 1920 "$OUT/phoneScreenshots/1.png"
+shot "$DIR/phone-permissions.html" 1080 1920 "$OUT/phoneScreenshots/2.png"
+shot "$DIR/web-pair.html"          1080 1920 "$OUT/phoneScreenshots/3.png"
+shot "$DIR/web-thread.html"        1080 1920 "$OUT/phoneScreenshots/4.png"
+shot "$DIR/web-desktop.html"       1440 900  "$OUT/tenInchScreenshots/1.png"

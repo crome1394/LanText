@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      position: relative;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #f3f6f4;
+      color: #14201a;
+    }
+    .status {
+      height: 72px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 40px;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .bar {
+      height: 112px;
+      display: flex;
+      align-items: center;
+      padding: 0 40px;
+      font-size: 44px;
+      font-weight: 650;
+    }
+    main { padding: 8px 32px 32px; filter: blur(2px); opacity: 0.45; }
+    .card {
+      background: #fff;
+      border-radius: 28px;
+      padding: 36px;
+      box-shadow: 0 10px 30px rgba(20, 32, 26, 0.08);
+    }
+    .scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: grid;
+      place-items: center;
+      padding: 48px;
+    }
+    .dialog {
+      width: 920px;
+      background: #fff;
+      border-radius: 28px;
+      padding: 40px 36px 32px;
+      box-shadow: 0 18px 50px rgba(20, 32, 26, 0.18);
+    }
+    h1 { margin: 0 0 12px; font-size: 40px; }
+    .intro { margin: 0 0 28px; color: #5b6b63; font-size: 24px; line-height: 1.4; }
+    .perm { margin: 0 0 22px; }
+    .perm-top { display: flex; align-items: baseline; gap: 12px; }
+    .perm h2 { margin: 0; font-size: 26px; font-weight: 700; flex: 1; }
+    .needed { color: #156B57; font-size: 22px; font-weight: 700; }
+    .perm p { margin: 6px 0 0; font-size: 22px; line-height: 1.35; color: #14201a; }
+    .grant {
+      margin-top: 12px;
+      background: #156B57;
+      color: #fff;
+      border-radius: 999px;
+      padding: 22px;
+      text-align: center;
+      font-size: 28px;
+      font-weight: 650;
+    }
+    .hint { margin: 14px 0 0; color: #5b6b63; font-size: 20px; line-height: 1.35; }
+  </style>
+</head>
+<body>
+  <div class="status"><span>12:18</span><span>Wi-Fi  84%</span></div>
+  <div class="bar">LanText</div>
+  <main>
+    <section class="card">
+      <h2 style="margin:0;font-size:34px;">Web access</h2>
+      <p style="color:#5b6b63;font-size:26px;">Off</p>
+    </section>
+  </main>
+  <div class="scrim">
+    <div class="dialog">
+      <h1>Permissions LanText needs</h1>
+      <p class="intro">Android will show a system prompt for each of these. Nothing they unlock is uploaded. Nearby devices and location are only so the inbox can read the Wi-Fi name.</p>
+      <div class="perm">
+        <div class="perm-top"><h2>SMS</h2><span class="needed">Needed</span></div>
+        <p>Read the system inbox and send texts through your carrier. Your default messenger stays in charge.</p>
+      </div>
+      <div class="perm">
+        <div class="perm-top"><h2>Contacts</h2><span class="needed">Needed</span></div>
+        <p>Show names, and save or add a second number from the computer. Contacts stay on this phone.</p>
+      </div>
+      <div class="perm">
+        <div class="perm-top"><h2>Notifications</h2><span class="needed">Needed</span></div>
+        <p>Pairing prompts, and the silent notice Android requires while the LAN server is running.</p>
+      </div>
+      <div class="perm">
+        <div class="perm-top"><h2>Nearby devices</h2><span class="needed">Needed</span></div>
+        <p>Android’s name for reading the Wi-Fi you are on — not a scan for headphones or other phones.</p>
+      </div>
+      <div class="perm">
+        <div class="perm-top"><h2>Location</h2><span class="needed">Needed</span></div>
+        <p>On older Android, the Wi-Fi name is gated behind location. Not GPS, not maps. Coordinates are never stored or sent.</p>
+      </div>
+      <div class="grant">Grant all</div>
+      <p class="hint">If Android does not ask again, enable them in Settings → Apps → LanText → Permissions.</p>
+    </div>
+  </div>
+</body>
+</html>

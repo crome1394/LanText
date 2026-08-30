@@ -23,23 +23,44 @@
       font-weight: 600;
     }
     .bar {
-      height: 112px;
+      height: 96px;
       display: flex;
       align-items: center;
       padding: 0 40px;
-      background: #f3f6f4;
       font-size: 44px;
       font-weight: 650;
     }
-    main { padding: 8px 32px 32px; display: flex; flex-direction: column; gap: 28px; }
+    main { padding: 8px 28px 28px; display: flex; flex-direction: column; gap: 18px; }
     .card {
       background: #fff;
-      border-radius: 28px;
-      padding: 36px;
+      border-radius: 24px;
+      padding: 28px 32px;
       box-shadow: 0 10px 30px rgba(20, 32, 26, 0.08);
     }
+    .center { text-align: center; }
+    h2 { margin: 0; font-size: 32px; font-weight: 650; }
+    .url {
+      font-family: ui-monospace, monospace;
+      font-size: 28px; font-weight: 700;
+      margin: 8px 0 16px;
+    }
+    .qr {
+      width: 420px; height: 420px; margin: 0 auto 12px;
+      background:
+        repeating-linear-gradient(90deg, #111 0 18px, #fff 18px 36px),
+        repeating-linear-gradient(0deg, #111 0 18px, #fff 18px 36px);
+      background-blend-mode: multiply;
+      border: 16px solid #fff;
+      box-shadow: inset 0 0 0 8px #111;
+    }
+    .pin {
+      font-family: ui-monospace, monospace;
+      font-size: 56px; font-weight: 700; letter-spacing: 0.08em;
+      margin: 4px 0 8px;
+    }
+    .fp { color: #5b6b63; font-size: 20px; font-family: ui-monospace, monospace; }
+    .refresh { margin-top: 8px; color: #156B57; font-size: 24px; font-weight: 650; }
     .row { display: flex; align-items: center; gap: 16px; }
-    .row h2 { margin: 0; font-size: 34px; font-weight: 650; }
     .row p { margin: 6px 0 0; color: #5b6b63; font-size: 26px; }
     .grow { flex: 1; }
     .switch {
@@ -51,35 +72,36 @@
       width: 40px; height: 40px; border-radius: 50%; background: #fff;
     }
     .chip {
-      display: inline-block; margin-top: 22px;
+      display: inline-block; margin-top: 16px;
       border: 1px solid #d8e0db; border-radius: 999px;
-      padding: 10px 22px; font-size: 24px; color: #14201a;
+      padding: 8px 20px; font-size: 24px;
     }
-    .center { text-align: center; }
-    .url {
-      font-family: ui-monospace, monospace;
-      font-size: 30px; font-weight: 700;
-      margin: 12px 0 28px;
+    .port {
+      margin-top: 18px; display: flex; align-items: center; justify-content: space-between;
     }
-    .label { font-size: 22px; letter-spacing: 0.12em; color: #5b6b63; font-weight: 700; }
-    .pin {
-      font-family: ui-monospace, monospace;
-      font-size: 72px; font-weight: 700; letter-spacing: 0.08em;
-      margin: 8px 0 24px;
-    }
-    .fp { color: #5b6b63; font-size: 22px; line-height: 1.45; }
-    .actions { display: flex; gap: 16px; }
+    .port .t { font-size: 24px; font-weight: 650; }
+    .port .s { color: #5b6b63; font-size: 24px; margin-top: 2px; }
+    .actions { display: flex; gap: 12px; }
     .btn {
       flex: 1; background: #dceee7; color: #0e3a31;
-      border-radius: 999px; padding: 28px; text-align: center;
-      font-size: 28px; font-weight: 650;
+      border-radius: 24px; padding: 18px 8px; text-align: center;
+      font-size: 26px; font-weight: 650;
     }
+    .btn small { display: block; font-size: 22px; margin-top: 4px; }
   </style>
 </head>
 <body>
   <div class="status"><span>12:18</span><span>Wi-Fi  84%</span></div>
   <div class="bar">LanText</div>
   <main>
+    <section class="card center">
+      <h2>Open on your computer</h2>
+      <div class="url">https://192.168.1.42:8743</div>
+      <div class="qr" aria-hidden="true"></div>
+      <div class="pin">48291073</div>
+      <div class="fp">SHA-256  A4 19 C2 7E 91 0B 55 D8 3C 6F E1 AA 12 70 4B 9D</div>
+      <div class="refresh">↻  New PIN and QR</div>
+    </section>
     <section class="card">
       <div class="row">
         <div class="grow">
@@ -89,17 +111,18 @@
         <div class="switch" aria-hidden="true"></div>
       </div>
       <span class="chip">Home</span>
-    </section>
-    <section class="card center">
-      <h2 style="margin:0 0 8px;font-size:34px;">Open on your computer</h2>
-      <div class="url">https://192.168.1.42:8743</div>
-      <div class="label">PIN</div>
-      <div class="pin">48291073</div>
-      <p class="fp">Your browser will warn about the certificate. Compare this fingerprint with what it shows:<br>A4:19:C2:7E:91:0B:55:D8:3C:6F:E1:AA:12:70:4B:9D</p>
+      <div class="port">
+        <div>
+          <div class="t">Listen port</div>
+          <div class="s">8743</div>
+        </div>
+        <div style="font-size:36px;color:#5b6b63;">▾</div>
+      </div>
     </section>
     <div class="actions">
-      <div class="btn">Networks</div>
-      <div class="btn">Paired computers</div>
+      <div class="btn">📶<small>Networks</small></div>
+      <div class="btn">💻<small>Computers</small></div>
+      <div class="btn">ℹ<small>About</small></div>
     </div>
   </main>
 </body>

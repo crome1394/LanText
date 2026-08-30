@@ -88,7 +88,10 @@ class GatewayController(
             stopServer()
             return false
         }
-        if (server != null && _snapshot.value.bindAddress == ip) {
+        if (server != null &&
+            _snapshot.value.bindAddress == ip &&
+            _snapshot.value.port == settings.listenPort
+        ) {
             return true
         }
         stopServer()
@@ -116,6 +119,15 @@ class GatewayController(
         server = created
         refresh(settings, pairing.pairingPin.value, clientCount.value)
         return true
+    }
+
+    @Synchronized
+    fun recyclePairing() {
+        val ip = WifiGate.wifiIpv4(context)
+        pairing.cancelPending()
+        certs.regenerate(ip)
+        stopServer()
+        startServerIfEligible()
     }
 
     @Synchronized

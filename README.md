@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-1F8A70.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8%2B-156B57.svg)](#build)
 [![F-Droid](https://img.shields.io/badge/F--Droid-planned-156B57.svg)](F-DROID.md)
-[![version](https://img.shields.io/badge/version-0.2.0--dev-14201a.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.2.0-14201a.svg)](CHANGELOG.md)
 [![source](https://img.shields.io/badge/github-crome1394%2FLanText-1F8A70.svg)](https://github.com/crome1394/LanText)
 
 ![LanText — SMS from your computer, never leaves your Wi-Fi](fastlane/metadata/android/en-US/images/featureGraphic.png)
@@ -46,9 +46,9 @@ trusted.
 ## What it feels like
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="LanText on the phone: URL, PIN, allowlist" width="240">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Pairing in the browser" width="240">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" alt="Thread with SMS and a picture" width="240">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="LanText on the phone: URL, PIN, listen port" width="240">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Permission popup explaining SMS, contacts, Nearby devices, and location" width="240">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" alt="Pairing in the browser" width="240">
 </p>
 
 - Two-pane inbox, search, contacts, unread dots
@@ -58,6 +58,7 @@ trusted.
 - Desktop notifications when a text arrives
 - Save an unknown number as a contact, or add it to someone you already know
 - Appearance: Auto, Light, or Dark, plus palettes
+- Change the listen port (default 8743) if something else on your LAN uses it
 - A home-screen widget flips web access on and off without opening the app
 
 ## How it works
@@ -73,9 +74,10 @@ trusted.
    the phone.
 6. Enter the PIN, then tap **Approve** on the phone.
 
-The server binds only to the phone's Wi-Fi IPv4 address, port **8743**, and
-only while you are on an allowed SSID. It is not exposed to the cellular
-network and it is not a public website.
+The server binds only to the phone's Wi-Fi IPv4 address, on port **8743**
+by default (you can change it in the app), and only while you are on an
+allowed SSID. It is not exposed to the cellular network and it is not a
+public website.
 
 ## Security
 
@@ -138,8 +140,8 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 ```
 
 - minSdk 26 (Android 8), targetSdk 36
-- Current development version: **0.2.0** (`versionCode` 2), unreleased
-- Latest git tag: **v0.1.0**
+- Current version: **0.2.0** (`versionCode` 2)
+- Latest git tag: **v0.2.0**
 - Application id: `app.lantext`
 - License: [Apache 2.0](LICENSE)
 

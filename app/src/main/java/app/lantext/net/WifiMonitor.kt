@@ -45,7 +45,17 @@ class WifiMonitor(
         }
     }
 
-    fun start() {
+    fun start() = register()
+
+    fun reregister() {
+        try {
+            cm.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+        }
+        register()
+    }
+
+    private fun register() {
         val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .build()
@@ -55,9 +65,14 @@ class WifiMonitor(
 
     private fun onCaps(caps: NetworkCapabilities) {
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            val info = caps.transportInfo as? WifiInfo
-            WifiGate.remember(info?.ssid)
-            WifiGate.currentSsid(context)?.let { ssid ->
+            val fromCallback = WifiGate.normalizeSsid((caps.transportInfo as? WifiInfo)?.ssid)
+            @Suppress("DEPRECATION")
+            val fromManager = WifiGate.normalizeSsid(
+                context.getSystemService(android.net.wifi.WifiManager::class.java)?.connectionInfo?.ssid,
+            )
+            val ssid = fromCallback ?: fromManager
+            if (ssid != null) {
+                WifiGate.remember(ssid)
                 scope.launch { settings.rememberSsid(ssid) }
             }
         }

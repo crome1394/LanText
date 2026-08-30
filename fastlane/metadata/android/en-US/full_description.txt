@@ -22,6 +22,7 @@
 <li>Pairing PIN plus an Approve tap before a computer is trusted</li>
 <li>HTTPS with a certificate generated on the device</li>
 <li>Home-screen widget to turn web access on or off</li>
+<li>Change the listen port if 8743 is already in use</li>
 <li>Foreground service only while you are on an allowed network</li>
 </ul>
 

@@ -103,6 +103,12 @@ class PairingManager(context: Context) {
         rotatePin()
     }
 
+    fun cancelPending() {
+        val request = pending.value ?: return
+        pending.value = null
+        deniedIds.add(request.id)
+    }
+
     fun pairStatus(id: String): PairStatus {
         if (approvedTokens.containsKey(id)) return PairStatus.APPROVED
         if (deniedIds.contains(id)) return PairStatus.DENIED

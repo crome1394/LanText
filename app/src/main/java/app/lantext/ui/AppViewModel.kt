@@ -46,10 +46,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nearbyDevices = WifiGate.hasNearbyDevicesPermission(app),
         location = WifiGate.hasLocationPermission(app),
         nearbyDevicesRequired = Build.VERSION.SDK_INT >= 33,
+        locationRequired = true,
+        notificationsRequired = Build.VERSION.SDK_INT >= 33,
     )
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
         app.settings.setEnabled(enabled)
+    }
+
+    fun setListenPort(port: Int) = viewModelScope.launch {
+        app.settings.setListenPort(port)
     }
 
     fun finishOnboarding() = viewModelScope.launch {
@@ -66,6 +72,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun removeNetwork(ssid: String) = viewModelScope.launch {
         app.settings.removeAllowedSsid(ssid)
+    }
+
+    fun forgetNetwork(ssid: String) = viewModelScope.launch {
+        app.settings.forgetSsid(ssid)
+    }
+
+    fun recyclePairing() {
+        app.gateway.recyclePairing()
     }
 
     fun approvePairing(id: String) = viewModelScope.launch {

@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         viewModel.refreshPermissions()
+        LanTextApp.instance.wifi.reregister()
         LanTextApp.instance.gateway.onNetworkChanged()
     }
 
@@ -44,9 +45,12 @@ class MainActivity : ComponentActivity() {
                     onRequestPermissions = { requestNeeded() },
                     onFinishOnboarding = viewModel::finishOnboarding,
                     onEnabled = viewModel::setEnabled,
+                    onListenPort = viewModel::setListenPort,
                     onAddCurrent = viewModel::addCurrentNetwork,
                     onAddNetwork = viewModel::addNetwork,
                     onRemoveNetwork = viewModel::removeNetwork,
+                    onForgetNetwork = viewModel::forgetNetwork,
+                    onRecyclePairing = viewModel::recyclePairing,
                     onApprove = viewModel::approvePairing,
                     onDeny = viewModel::denyPairing,
                     onRevoke = viewModel::revoke,
@@ -58,6 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshPermissions()
+        LanTextApp.instance.wifi.reregister()
         LanTextApp.instance.gateway.onNetworkChanged()
     }
 

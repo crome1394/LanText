@@ -10,6 +10,10 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-30
+
+Test build for sideload. Same developer-signed flow as Point Forecast.
+
 ### Added
 
 - Web appearance picker: Auto / Light / Dark, plus nine palettes (Fern, Ocean,
@@ -21,6 +25,19 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
   Nearby devices are requested only so Android will reveal the Wi-Fi name.
 - When a required permission is missing, a popup explains each one, with a
   Grant all button. The home-screen grant button is gone.
+- Configurable listen port on the phone (default 8743, range 1024–65535).
+  The HTTPS URL and server bind follow the saved port. The port editor is
+  collapsed until you open it.
+- Remove a saved Wi-Fi name from the list after turning it off.
+- Refresh PIN and QR from the phone while web access is listening.
+- About: collapsible permissions, a card for each permission, and a GitHub link.
+- Home screen puts the QR and PIN first and is denser so a phone can show it without scrolling.
+- About: “For LAN operators” notes (certificate, static IP, reverse proxies).
+- Home screen fills the phone height; navigation labels stay on one line.
+- Re-register the Wi-Fi callback after permissions are granted so the SSID
+  is not stuck as hidden. Location is requested on all versions because
+  Android still withholds the network name without it.
+- System back / swipe-back on Networks, Computers, and About returns to home.
 
 ### Removed
 
@@ -52,4 +69,5 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.0]: #020--2026-08-30
 [0.1.0]: #010--2026-08-30

@@ -26,10 +26,40 @@
     }
     .head h1, .thread-head h2 { margin: 0; font-size: 1.1rem; }
     .muted { color: #5b6b63; margin: 0; font-size: 0.85rem; }
+    .head-actions { margin-left: auto; display: flex; gap: 8px; }
     .plus {
-      margin-left: auto; width: 40px; height: 40px; border-radius: 50%;
-      background: #f3f6f4; display: grid; place-items: center; font-size: 1.3rem;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #f3f6f4; display: grid; place-items: center; font-size: 1.05rem;
+      font-weight: 700;
     }
+    .scrim {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.45);
+      display: grid; place-items: center; z-index: 20;
+    }
+    .modal {
+      width: 480px; background: #fff; border-radius: 16px; padding: 16px;
+      box-shadow: 0 10px 30px rgba(20, 32, 26, 0.18);
+    }
+    .modal header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .modal h2 { margin: 0; font-size: 1.15rem; }
+    .close { width: 40px; height: 40px; border-radius: 50%; background: #f3f6f4; display: grid; place-items: center; font-size: 1.2rem; }
+    .seg {
+      display: flex; gap: 4px; background: #f3f6f4; border: 1px solid #d8e0db;
+      padding: 4px; border-radius: 999px; margin: 12px 0 16px;
+    }
+    .seg span {
+      flex: 1; text-align: center; padding: 8px 10px; border-radius: 999px; font-size: 0.85rem;
+    }
+    .seg .on { background: #fff; font-weight: 600; box-shadow: 0 10px 30px rgba(20, 32, 26, 0.08); }
+    .theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .theme {
+      border: 1px solid #d8e0db; background: #f3f6f4; border-radius: 12px; padding: 10px 8px 8px;
+    }
+    .theme.on { border-color: #156b57; box-shadow: 0 0 0 2px #156b57; }
+    .swatch { display: flex; height: 28px; border-radius: 8px; overflow: hidden; margin-bottom: 6px; border: 1px solid #d8e0db; }
+    .swatch i { flex: 1; display: block; }
+    .theme-name { font-size: 0.8rem; font-weight: 600; }
+    .app { position: relative; }
     .search { padding: 8px 12px; }
     .search div {
       border: 1px solid #d8e0db; background: #f3f6f4;
@@ -95,7 +125,10 @@
           <h1>LanText</h1>
           <p class="muted">Connected</p>
         </div>
-        <div class="plus">+</div>
+        <div class="head-actions">
+          <div class="plus">Aa</div>
+          <div class="plus">+</div>
+        </div>
       </div>
       <div class="search"><div>Search conversations  Ctrl+K</div></div>
       <div class="list">
@@ -157,6 +190,31 @@
         <div class="send">Send</div>
       </div>
     </main>
+    <div class="scrim">
+      <div class="modal">
+        <header>
+          <h2>Appearance</h2>
+          <div class="close">×</div>
+        </header>
+        <p class="muted">Auto follows your system light or dark setting. Palettes keep both appearances.</p>
+        <div class="seg">
+          <span class="on">Auto</span>
+          <span>Light</span>
+          <span>Dark</span>
+        </div>
+        <div class="theme-grid">
+          <div class="theme on"><div class="swatch"><i style="background:#156b57"></i><i style="background:#1f8a70"></i><i style="background:#f3f6f4"></i></div><div class="theme-name">Fern</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#0b6e99"></i><i style="background:#38bdf8"></i><i style="background:#f0f6fa"></i></div><div class="theme-name">Ocean</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#5b3cc4"></i><i style="background:#a78bfa"></i><i style="background:#f6f3fb"></i></div><div class="theme-name">Dusk</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#c2410c"></i><i style="background:#fb923c"></i><i style="background:#fbf6f1"></i></div><div class="theme-name">Ember</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#334155"></i><i style="background:#94a3b8"></i><i style="background:#f4f5f7"></i></div><div class="theme-name">Slate</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#be185d"></i><i style="background:#f472b6"></i><i style="background:#fdf6f8"></i></div><div class="theme-name">Sakura</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#3f7d20"></i><i style="background:#86efac"></i><i style="background:#f4faf2"></i></div><div class="theme-name">Meadow</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#5e81ac"></i><i style="background:#88c0d0"></i><i style="background:#eceff4"></i></div><div class="theme-name">Nord</div></div>
+          <div class="theme"><div class="swatch"><i style="background:#000"></i><i style="background:#fff"></i><i style="background:#e6e6e6"></i></div><div class="theme-name">Contrast</div></div>
+        </div>
+      </div>
+    </div>
   </div>
 </body>
 </html>

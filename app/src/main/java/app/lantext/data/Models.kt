@@ -37,6 +37,7 @@ enum class GateReason {
     NO_NETWORK_SELECTED,
     WRONG_NETWORK,
     NO_WIFI,
+    SSID_HIDDEN,
     MISSING_SMS_PERMISSION,
     MISSING_NOTIFICATION_PERMISSION,
     LISTENING,
@@ -49,9 +50,13 @@ data class PermissionState(
     val nearbyDevices: Boolean = false,
     val location: Boolean = false,
     val nearbyDevicesRequired: Boolean = false,
+    val locationRequired: Boolean = false,
+    val notificationsRequired: Boolean = false,
 ) {
     val allGranted: Boolean
-        get() = sms && contacts && notifications && nearbyDevices && location
+        get() = sms && contacts && notifications &&
+            (!nearbyDevicesRequired || nearbyDevices) &&
+            (!locationRequired || location)
 }
 
 data class GatewaySnapshot(

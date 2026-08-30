@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import app.lantext.util.ListenPort
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -48,6 +49,20 @@ class SettingsRepository(context: Context) {
         store.edit { prefs ->
             prefs[KEY_ALLOWED] = (prefs[KEY_ALLOWED] ?: emptySet()) - ssid
         }
+    }
+
+    suspend fun forgetSsid(ssid: String) {
+        store.edit { prefs ->
+            prefs[KEY_ALLOWED] = (prefs[KEY_ALLOWED] ?: emptySet()) - ssid
+            prefs[KEY_KNOWN] = (prefs[KEY_KNOWN] ?: emptySet()) - ssid
+        }
+    }
+
+    suspend fun setListenPort(port: Int) {
+        require(ListenPort.isValid(port)) {
+            "Port must be between ${ListenPort.MIN} and ${ListenPort.MAX}"
+        }
+        store.edit { it[KEY_PORT] = port }
     }
 
     suspend fun rememberSsid(ssid: String) {

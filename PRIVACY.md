@@ -23,10 +23,11 @@ Nothing is uploaded to a LanText server. There is no LanText server.
 
 ## Location
 
-LanText requests location and, on Android 13+, Nearby devices **only** so
-Android will reveal the current SSID. Nearby devices is not a scan for
-headphones, speakers, or other phones. The name is compared against your
-allowlist. Coordinates are never read, stored, or sent.
+LanText requests Nearby devices (Android 13+) and location so Android will
+reveal the current SSID. Location is still required for the live Wi-Fi name
+on current Pixels, even with Nearby devices. Coordinates are never read,
+stored, or sent. Nearby devices is not a scan for headphones, speakers, or
+other phones.
 
 ## Certificates and pairing
 

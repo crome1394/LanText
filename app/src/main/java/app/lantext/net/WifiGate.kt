@@ -24,19 +24,31 @@ object WifiGate {
         lastSsid = normalizeSsid(ssid)
     }
 
+    fun isOnWifi(context: Context): Boolean {
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
     fun currentSsid(context: Context): String? {
-        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
-        val network = cm.activeNetwork ?: return null
-        val caps = cm.getNetworkCapabilities(network) ?: return null
-        if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
+        if (!isOnWifi(context)) {
+            lastSsid = null
+            return null
+        }
         lastSsid?.let { return it }
-        val fromCaps = normalizeSsid(wifiInfo(caps, context)?.ssid)
-        if (fromCaps != null) return fromCaps
         @Suppress("DEPRECATION")
         val fromManager = normalizeSsid(
             context.getSystemService(WifiManager::class.java)?.connectionInfo?.ssid,
         )
-        return fromManager
+        if (fromManager != null) {
+            lastSsid = fromManager
+            return fromManager
+        }
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
+        val network = cm.activeNetwork ?: return null
+        val caps = cm.getNetworkCapabilities(network) ?: return null
+        return normalizeSsid(wifiInfo(caps, context)?.ssid)
     }
 
     fun wifiIpv4(context: Context): String? {
@@ -59,7 +71,9 @@ object WifiGate {
         if (!hasNotificationPermission(context)) return GateReason.MISSING_NOTIFICATION_PERMISSION
         if (settings.allowedSsids.isEmpty()) return GateReason.NO_NETWORK_SELECTED
         val ssid = currentSsid(context)
-        if (ssid == null) return GateReason.NO_WIFI
+        if (ssid == null) {
+            return if (isOnWifi(context) || wifiIpv4(context) != null) GateReason.SSID_HIDDEN else GateReason.NO_WIFI
+        }
         if (ssid !in settings.allowedSsids) return GateReason.WRONG_NETWORK
         return GateReason.LISTENING
     }
@@ -98,7 +112,11 @@ object WifiGate {
     }
 
     fun hasNearbyWifiPermission(context: Context): Boolean =
-        hasNearbyDevicesPermission(context) && hasLocationPermission(context)
+        if (Build.VERSION.SDK_INT >= 33) {
+            hasNearbyDevicesPermission(context)
+        } else {
+            hasLocationPermission(context)
+        }
 
     fun normalizeSsid(raw: String?): String? {
         val value = raw?.trim()?.trim('"').orEmpty()
