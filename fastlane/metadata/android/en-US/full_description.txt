@@ -1,0 +1,33 @@
+<p><b>Type SMS on a real keyboard. Paste a picture. Nothing leaves your Wi-Fi.</b></p>
+
+<p>LanText is a companion for the messenger you already use — Fossify Messages, Google Messages, Samsung Messages, or anything else that writes to the system SMS store. It does <b>not</b> become the default SMS app.</p>
+
+<p>Turn it on at home, open the HTTPS address in any browser, and you get a two-pane inbox: conversations on the left, the thread on the right. Texts and pictures go out through your carrier. Your phone app stays in sync.</p>
+
+<p>There is no account and no cloud. The server binds only to the phone’s Wi-Fi address, and only on Wi-Fi names you allow. Leave that network and it stops.</p>
+
+<p><b>On the computer</b></p>
+<ul>
+<li>Any OS, any modern browser</li>
+<li>Search conversations and contacts</li>
+<li>Enter to send, Shift+Enter for a new line</li>
+<li>Paste, drop, or attach a picture — sent as MMS</li>
+<li>Clickable links, desktop notifications, live updates</li>
+</ul>
+
+<p><b>On the phone</b></p>
+<ul>
+<li>Pairing PIN plus an Approve tap before a computer is trusted</li>
+<li>HTTPS with a certificate generated on the device</li>
+<li>Home-screen widget to turn web access on or off</li>
+<li>Foreground service only while you are on an allowed network</li>
+</ul>
+
+<p><b>Privacy</b></p>
+<p>No analytics, no crash reporting, no ads. Location permission is used only so Android will reveal the Wi-Fi name for the allowlist — coordinates are never read or sent.</p>
+
+<p><b>Not on Google Play</b></p>
+<p>Play rejects SMS permissions unless an app is the default messenger. LanText refuses to take that role, so it is built for F-Droid and sideload.</p>
+
+<p><b>Limits</b></p>
+<p>Because LanText is not the default SMS app, Android may block mark-as-read and delete in the system database. Incoming MMS is stored by your default messenger; LanText can display it once it is on the device. Outgoing MMS still needs mobile data, even on Wi-Fi.</p>

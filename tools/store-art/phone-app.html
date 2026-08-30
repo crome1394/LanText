@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #f3f6f4;
+      color: #14201a;
+    }
+    .status {
+      height: 72px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 40px;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .bar {
+      height: 112px;
+      display: flex;
+      align-items: center;
+      padding: 0 40px;
+      background: #f3f6f4;
+      font-size: 44px;
+      font-weight: 650;
+    }
+    main { padding: 8px 32px 32px; display: flex; flex-direction: column; gap: 28px; }
+    .card {
+      background: #fff;
+      border-radius: 28px;
+      padding: 36px;
+      box-shadow: 0 10px 30px rgba(20, 32, 26, 0.08);
+    }
+    .row { display: flex; align-items: center; gap: 16px; }
+    .row h2 { margin: 0; font-size: 34px; font-weight: 650; }
+    .row p { margin: 6px 0 0; color: #5b6b63; font-size: 26px; }
+    .grow { flex: 1; }
+    .switch {
+      width: 92px; height: 52px; border-radius: 999px;
+      background: #156B57; position: relative;
+    }
+    .switch::after {
+      content: ""; position: absolute; top: 6px; right: 6px;
+      width: 40px; height: 40px; border-radius: 50%; background: #fff;
+    }
+    .chip {
+      display: inline-block; margin-top: 22px;
+      border: 1px solid #d8e0db; border-radius: 999px;
+      padding: 10px 22px; font-size: 24px; color: #14201a;
+    }
+    .center { text-align: center; }
+    .url {
+      font-family: ui-monospace, monospace;
+      font-size: 30px; font-weight: 700;
+      margin: 12px 0 28px;
+    }
+    .label { font-size: 22px; letter-spacing: 0.12em; color: #5b6b63; font-weight: 700; }
+    .pin {
+      font-family: ui-monospace, monospace;
+      font-size: 72px; font-weight: 700; letter-spacing: 0.08em;
+      margin: 8px 0 24px;
+    }
+    .fp { color: #5b6b63; font-size: 22px; line-height: 1.45; }
+    .actions { display: flex; gap: 16px; }
+    .btn {
+      flex: 1; background: #dceee7; color: #0e3a31;
+      border-radius: 999px; padding: 28px; text-align: center;
+      font-size: 28px; font-weight: 650;
+    }
+  </style>
+</head>
+<body>
+  <div class="status"><span>12:18</span><span>Wi-Fi  84%</span></div>
+  <div class="bar">LanText</div>
+  <main>
+    <section class="card">
+      <div class="row">
+        <div class="grow">
+          <h2>Web access</h2>
+          <p>Listening on Home</p>
+        </div>
+        <div class="switch" aria-hidden="true"></div>
+      </div>
+      <span class="chip">Home</span>
+    </section>
+    <section class="card center">
+      <h2 style="margin:0 0 8px;font-size:34px;">Open on your computer</h2>
+      <div class="url">https://192.168.1.42:8743</div>
+      <div class="label">PIN</div>
+      <div class="pin">48291073</div>
+      <p class="fp">Your browser will warn about the certificate. Compare this fingerprint with what it shows:<br>A4:19:C2:7E:91:0B:55:D8:3C:6F:E1:AA:12:70:4B:9D</p>
+    </section>
+    <div class="actions">
+      <div class="btn">Networks</div>
+      <div class="btn">Paired computers</div>
+    </div>
+  </main>
+</body>
+</html>

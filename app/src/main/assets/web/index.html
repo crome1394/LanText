@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>LanText</title>
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <section id="pair-view" class="view" hidden>
+      <div class="pair-card">
+        <h1>LanText</h1>
+        <p class="lede">This page is served by your phone on your home Wi-Fi. Enter the PIN shown in the LanText app, then approve the request on the phone.</p>
+        <p id="fp-line" class="fingerprint"></p>
+        <form id="pair-form">
+          <label for="pin">Pairing PIN</label>
+          <input id="pin" name="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]{8}" placeholder="00000000" required />
+          <button type="submit" id="pair-btn">Pair this computer</button>
+        </form>
+        <p id="pair-status" class="status"></p>
+      </div>
+    </section>
+
+    <section id="app-view" class="view" hidden>
+      <aside id="sidebar">
+        <header class="sidebar-head">
+          <div>
+            <h1>LanText</h1>
+            <p class="muted" id="conn-label">Connected</p>
+          </div>
+          <button id="new-btn" class="icon-btn" title="New message (Ctrl+N)">+</button>
+        </header>
+        <div class="search-wrap">
+          <input id="search" type="search" placeholder="Search conversations  Ctrl+K" />
+        </div>
+        <button type="button" id="notify-banner" class="notify-banner" hidden>
+          Enable desktop notifications for new texts
+        </button>
+        <div id="convo-list" class="convo-list"></div>
+      </aside>
+      <div id="convo-menu" class="menu" hidden>
+        <button type="button" id="menu-delete" class="danger">Delete conversation</button>
+      </div>
+      <main id="thread">
+        <div id="empty-thread" class="empty">
+          <p>Select a conversation</p>
+        </div>
+        <div id="thread-panel" hidden>
+          <header class="thread-head">
+            <button id="back-btn" class="icon-btn mobile-only" title="Back">‹</button>
+            <div id="thread-avatar" class="avatar"></div>
+            <div>
+              <h2 id="thread-name"></h2>
+              <p id="thread-number" class="muted"></p>
+            </div>
+          </header>
+          <div id="messages" class="messages"></div>
+          <form id="composer">
+            <input id="file-input" type="file" accept="image/*" hidden />
+            <button type="button" id="attach-btn" class="icon-btn" title="Attach or paste a picture">📎</button>
+            <div class="compose-main">
+              <div id="pending-preview" hidden></div>
+              <textarea id="compose-text" rows="1" placeholder="Message or paste a picture" title="Enter to send, Shift+Enter for a new line, paste an image to attach"></textarea>
+              <p class="compose-hint">Enter to send · paste or drop a picture to attach · Shift+Enter for a new line</p>
+            </div>
+            <button type="submit" id="send-btn" title="Send (Enter)">Send</button>
+          </form>
+        </div>
+      </main>
+    </section>
+
+    <div id="new-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header>
+          <h2>New message</h2>
+          <button type="button" id="close-new" class="icon-btn">×</button>
+        </header>
+        <input id="contact-search" type="search" placeholder="Name or number" />
+        <div id="contact-list"></div>
+        <form id="new-form">
+          <input id="new-file-input" type="file" accept="image/*" hidden />
+          <div id="new-pending-preview" hidden></div>
+          <textarea id="new-body" rows="3" placeholder="Message (Enter to send, paste a picture)"></textarea>
+          <div class="new-actions">
+            <button type="button" id="new-attach-btn">Attach picture</button>
+            <button type="submit">Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="help-modal" class="modal" hidden>
+      <div class="modal-card help-card">
+        <header>
+          <h2>Keyboard shortcuts</h2>
+          <button type="button" id="close-help" class="icon-btn">×</button>
+        </header>
+        <table class="keys">
+          <tr><td><kbd>Enter</kbd></td><td>Send message</td></tr>
+          <tr><td><kbd>Shift</kbd>+<kbd>Enter</kbd></td><td>New line</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Send (same as Enter)</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>New message</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Search conversations</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Search (when not typing)</td></tr>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>J</kbd> <kbd>K</kbd></td><td>Previous / next conversation</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close dialog or leave the composer</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show this list</td></tr>
+        </table>
+        <p class="muted">On a Mac, use ⌘ in place of Ctrl.</p>
+      </div>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

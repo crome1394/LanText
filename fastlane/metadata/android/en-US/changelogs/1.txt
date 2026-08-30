@@ -1,0 +1,9 @@
+First public release.
+
+• SMS send and receive from any browser on your home Wi-Fi
+• Paste, drop, or attach pictures — they go out as MMS through the carrier
+• Pairing PIN plus on-phone Approve; HTTPS with a phone-generated certificate
+• Server only on Wi-Fi names you allow
+• Search, contacts, keyboard shortcuts, desktop notifications
+• Home-screen widget to turn web access on or off
+• Keeps Fossify, Google Messages, or any default SMS app in place

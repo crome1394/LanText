@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LanText</string>
+    <string name="notification_channel_gateway">Web access</string>
+    <string name="notification_channel_pairing">Pairing requests</string>
+    <string name="notification_listening">LanText is available on this Wi-Fi</string>
+    <string name="notification_waiting">Waiting for an allowed Wi-Fi network</string>
+    <string name="notification_stop">Stop</string>
+    <string name="notification_pairing_title">Computer wants to pair</string>
+    <string name="notification_pairing_body">%1$s is requesting access to your messages. Approve only if this is you.</string>
+    <string name="approve">Approve</string>
+    <string name="deny">Deny</string>
+    <string name="widget_description">Turn LanText web access on or off</string>
+    <string name="widget_off">Off</string>
+    <string name="widget_listening">Listening on %1$s</string>
+    <string name="widget_waiting">Waiting for allowed Wi-Fi</string>
+    <string name="widget_turn_on">Turn on</string>
+    <string name="widget_turn_off">Turn off</string>
+</resources>
+

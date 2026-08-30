@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #f3f6f4;
+      color: #14201a;
+    }
+    .wrap {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 48px;
+    }
+    .card {
+      width: 860px;
+      background: #fff;
+      padding: 64px 56px 56px;
+      border-radius: 28px;
+      box-shadow: 0 10px 30px rgba(20, 32, 26, 0.08);
+    }
+    h1 { margin: 0 0 16px; font-size: 56px; }
+    .lede { color: #5b6b63; font-size: 28px; line-height: 1.4; margin: 0 0 28px; }
+    .fp {
+      font-family: ui-monospace, monospace;
+      font-size: 22px;
+      word-break: break-all;
+      color: #5b6b63;
+      margin: 0 0 36px;
+    }
+    label { display: block; font-weight: 700; font-size: 26px; margin-bottom: 12px; }
+    .pin {
+      width: 100%;
+      border: 1px solid #d8e0db;
+      background: #f3f6f4;
+      border-radius: 16px;
+      padding: 22px;
+      font-size: 48px;
+      letter-spacing: 0.28em;
+      text-align: center;
+      font-family: ui-monospace, monospace;
+    }
+    .btn {
+      margin-top: 32px;
+      background: #156B57;
+      color: #fff;
+      border-radius: 999px;
+      padding: 22px;
+      text-align: center;
+      font-size: 28px;
+      font-weight: 650;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>LanText</h1>
+      <p class="lede">This page is served by your phone on your home Wi-Fi. Enter the PIN shown in the LanText app, then approve the request on the phone.</p>
+      <p class="fp">SHA-256  A4:19:C2:7E:91:0B:55:D8:3C:6F:E1:AA:12:70:4B:9D</p>
+      <label>Pairing PIN</label>
+      <div class="pin">48291073</div>
+      <div class="btn">Pair this computer</div>
+    </div>
+  </div>
+</body>
+</html>

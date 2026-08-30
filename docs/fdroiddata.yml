@@ -1,0 +1,28 @@
+# Draft metadata for gitlab.com/fdroid/fdroiddata
+# Replace every TODO, then open a merge request.
+# This file is *not* read by the Android Gradle build.
+
+Categories:
+  - Phone & SMS
+  - Internet
+License: Apache-2.0
+AuthorName: Matthew Crome
+WebSite: TODO_WEBSITE_OR_REMOVE
+SourceCode: TODO_GIT_HTTPS_URL
+IssueTracker: TODO_GIT_HTTPS_URL/issues
+
+RepoType: git
+Repo: TODO_GIT_HTTPS_URL
+
+Builds:
+  - versionName: 0.1.0
+    versionCode: 1
+    commit: v0.1.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 0.1.0
+CurrentVersionCode: 1

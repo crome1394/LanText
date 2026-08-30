@@ -1,0 +1,5 @@
+-keepattributes *Annotation*, InnerClasses, Signature, Exception
+-keep class io.ktor.** { *; }
+-keep class kotlinx.serialization.** { *; }
+-dontwarn org.slf4j.**
+-dontwarn kotlinx.atomicfu.**
