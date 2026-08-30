@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-1F8A70.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8%2B-156B57.svg)](#build)
 [![F-Droid](https://img.shields.io/badge/F--Droid-planned-156B57.svg)](F-DROID.md)
-[![version](https://img.shields.io/badge/version-0.2.1-14201a.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.2.2-14201a.svg)](CHANGELOG.md)
 [![source](https://img.shields.io/badge/github-crome1394%2FLanText-1F8A70.svg)](https://github.com/crome1394/LanText)
 
 ![LanText — SMS from your computer, never leaves your Wi-Fi](fastlane/metadata/android/en-US/images/featureGraphic.png)
@@ -140,8 +140,8 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 ```
 
 - minSdk 26 (Android 8), targetSdk 36
-- Current version: **0.2.1** (`versionCode` 3)
-- Latest git tag: **v0.2.1**
+- Current version: **0.2.2** (`versionCode` 4)
+- Latest git tag: **v0.2.2**
 - Application id: `app.lantext`
 - License: [Apache 2.0](LICENSE)
 

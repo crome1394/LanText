@@ -10,6 +10,14 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-30
+
+Sideload build for testers. Same developer-signed GitHub release as Point Forecast.
+
+### Added
+
+- About screen shows the app version (`versionName`).
+
 ### Fixed
 
 - Saving or updating a contact from the web UI writes into the same
@@ -82,6 +90,7 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.2]: #022--2026-08-30
 [0.2.1]: #021--2026-08-30
 [0.2.0]: #020--2026-08-30
 [0.1.0]: #010--2026-08-30

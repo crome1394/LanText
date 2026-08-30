@@ -1,0 +1,5 @@
+Cloud-synced contacts from the web inbox; version on About.
+
+• Writes contacts into the Google (or other sync) account already on the phone
+• About shows the app version
+• Sideload APK on GitHub Releases (same developer-signed flow as Point Forecast)
