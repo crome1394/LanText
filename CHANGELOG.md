@@ -10,6 +10,12 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving or updating a contact from the web UI writes into the same
+  Google (or other sync) account as existing contacts, so cloud-synced
+  address books accept the change.
+
 ## [0.2.1] — 2026-08-30
 
 ### Changed

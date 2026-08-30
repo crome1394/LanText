@@ -87,28 +87,35 @@ class ContactsRepository(private val context: Context) {
         require(display.isNotEmpty()) { "Name is required" }
         require(phone.isNotEmpty()) { "Number is required" }
         requireWrite()
+        val account = preferredAccount()
+        val given = display.substringBefore(' ').ifBlank { display }
+        val family = display.substringAfter(' ', "").trim()
         val ops = ArrayList<ContentProviderOperation>()
         ops += ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
-            .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
-            .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
+            .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, account.type)
+            .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, account.name)
             .build()
         ops += ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
             .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
             .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
             .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, display)
+            .withValue(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME, given)
+            .withValue(ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME, family.ifBlank { null })
             .build()
         ops += ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
             .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
             .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
             .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
             .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+            .withValue(ContactsContract.CommonDataKinds.Phone.IS_PRIMARY, 1)
+            .withValue(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY, 1)
             .build()
         try {
             context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
         } catch (e: SecurityException) {
             throw e
         } catch (e: Exception) {
-            throw IllegalStateException(e.message ?: "Could not save the contact")
+            throw IllegalStateException(contactWriteError(e, "Could not save the contact"))
         }
         refresh()
         lookup(phone)?.let { toDto(it) } ?: ContactDto(
@@ -125,8 +132,8 @@ class ContactsRepository(private val context: Context) {
         require(phone.isNotEmpty()) { "Number is required" }
         val id = contactId.toLongOrNull() ?: throw IllegalArgumentException("Invalid contact")
         requireWrite()
-        val rawId = rawContactId(id)
-            ?: throw IllegalStateException("Could not find that contact")
+        val rawId = writableRawContactId(id)
+            ?: throw IllegalStateException("Could not find a writable copy of that contact")
         val values = ContentValues().apply {
             put(ContactsContract.Data.RAW_CONTACT_ID, rawId)
             put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
@@ -138,7 +145,7 @@ class ContactsRepository(private val context: Context) {
         } catch (e: SecurityException) {
             throw e
         } catch (e: Exception) {
-            throw IllegalStateException(e.message ?: "Could not add that number")
+            throw IllegalStateException(contactWriteError(e, "Could not add that number"))
         }
         if (inserted == null) {
             throw IllegalStateException("Could not add that number to the contact")
@@ -187,17 +194,66 @@ class ContactsRepository(private val context: Context) {
         }
     }
 
-    private fun rawContactId(contactId: Long): Long? {
+    private data class ContactAccount(val type: String?, val name: String?)
+
+    private fun preferredAccount(): ContactAccount {
+        val counts = LinkedHashMap<ContactAccount, Int>()
         context.contentResolver.query(
             ContactsContract.RawContacts.CONTENT_URI,
-            arrayOf(ContactsContract.RawContacts._ID),
-            "${ContactsContract.RawContacts.CONTACT_ID}=?",
+            arrayOf(
+                ContactsContract.RawContacts.ACCOUNT_TYPE,
+                ContactsContract.RawContacts.ACCOUNT_NAME,
+            ),
+            "${ContactsContract.RawContacts.DELETED}=0",
+            null,
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val type = cursor.getString(0)
+                val name = cursor.getString(1)
+                if (type.isNullOrBlank() || name.isNullOrBlank()) continue
+                if (isReadOnlyAccount(type)) continue
+                val key = ContactAccount(type, name)
+                counts[key] = (counts[key] ?: 0) + 1
+            }
+        }
+        counts.keys.firstOrNull { it.type == "com.google" }?.let { return it }
+        return counts.maxByOrNull { it.value }?.key ?: ContactAccount(null, null)
+    }
+
+    private fun writableRawContactId(contactId: Long): Long? {
+        val rows = mutableListOf<Triple<Long, String?, String?>>()
+        context.contentResolver.query(
+            ContactsContract.RawContacts.CONTENT_URI,
+            arrayOf(
+                ContactsContract.RawContacts._ID,
+                ContactsContract.RawContacts.ACCOUNT_TYPE,
+                ContactsContract.RawContacts.ACCOUNT_NAME,
+            ),
+            "${ContactsContract.RawContacts.CONTACT_ID}=? AND ${ContactsContract.RawContacts.DELETED}=0",
             arrayOf(contactId.toString()),
             null,
         )?.use { cursor ->
-            if (cursor.moveToFirst()) return cursor.getLong(0)
+            while (cursor.moveToNext()) {
+                rows += Triple(cursor.getLong(0), cursor.getString(1), cursor.getString(2))
+            }
         }
-        return null
+        val writable = rows.filter { !isReadOnlyAccount(it.second) }
+        val pool = writable.ifEmpty { rows }
+        return pool.firstOrNull { it.second == "com.google" }?.first
+            ?: pool.firstOrNull { !it.second.isNullOrBlank() }?.first
+            ?: pool.firstOrNull()?.first
+    }
+
+    private fun isReadOnlyAccount(type: String?): Boolean {
+        val t = type.orEmpty().lowercase()
+        if (t.isEmpty()) return false
+        return t.contains("sim") || t.contains("profile") || t == "com.android.contacts.sim"
+    }
+
+    private fun contactWriteError(e: Exception, fallback: String): String {
+        val detail = e.message?.takeIf { it.isNotBlank() }
+        return if (detail != null) "$fallback ($detail)" else fallback
     }
 
     companion object {
