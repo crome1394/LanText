@@ -26,9 +26,9 @@ Binaries:
   https://github.com/crome1394/LanText/releases/download/v%v/app-release-signed.apk
 
 Builds:
-  - versionName: 0.2.3
-    versionCode: 5
-    commit: 6b42261de4fea3e043d22db69b5b0e3165a29763
+  - versionName: 0.2.4
+    versionCode: 6
+    commit: cec8a9a26f48f0a42d84274f68aa20779ec20e23
     subdir: app
     gradle:
       - yes
@@ -43,5 +43,5 @@ MaintainerNotes: |-
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.2.3
-CurrentVersionCode: 5
+CurrentVersion: 0.2.4
+CurrentVersionCode: 6
