@@ -10,6 +10,10 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-08-30
+
+Sideload build for testers.
+
 ### Fixed
 
 - Keep the LAN listener reachable overnight with no computer connected:
@@ -115,6 +119,7 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.4]: #024--2026-08-30
 [0.2.3]: #023--2026-08-30
 [0.2.2]: #022--2026-08-30
 [0.2.1]: #021--2026-08-30

@@ -1,0 +1,4 @@
+Stay reachable overnight with no computer connected.
+
+• Wi-Fi lock is held while web access is listening, not only while a browser is open
+• Foreground service stays up so a reverse proxy such as lantext.lan does not return HTTP 502 after the PC is powered off
