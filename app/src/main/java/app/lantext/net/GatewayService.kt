@@ -3,10 +3,13 @@ package app.lantext.net
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import app.lantext.LanTextApp
 import app.lantext.notify.Notifications
 import kotlinx.coroutines.CoroutineScope
@@ -21,7 +24,10 @@ class GatewayService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observeJob: Job? = null
     private var wifiLock: WifiManager.WifiLock? = null
-    private var wakeLock: PowerManager.WakeLock? = null
+    private var holdingWifiRequest = false
+    private val keepWifiCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = Unit
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -43,26 +49,17 @@ class GatewayService : Service() {
                 return START_NOT_STICKY
             }
         }
-        val started = try {
+        try {
             app().gateway.startServerIfEligible()
         } catch (t: Throwable) {
             android.util.Log.e("LanText", "Gateway start failed", t)
-            false
-        }
-        if (!started) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
         }
         if (observeJob == null) {
             observeJob = scope.launch {
                 app().gateway.snapshot.collectLatest { snap ->
                     Notifications.updateGateway(this@GatewayService, snap)
-                    updateLocks(snap.clientCount)
-                    if (!snap.listening && !snap.enabled) {
-                        stopSelf()
-                    } else if (!snap.listening) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    updateLocks(snap.listening)
+                    if (!snap.enabled) {
                         stopSelf()
                     }
                 }
@@ -74,22 +71,44 @@ class GatewayService : Service() {
     override fun onDestroy() {
         observeJob?.cancel()
         app().gateway.stopServer()
-        wifiLock?.let { if (it.isHeld) it.release() }
-        wakeLock?.let { if (it.isHeld) it.release() }
+        updateLocks(false)
         scope.cancel()
         super.onDestroy()
     }
 
-    private fun updateLocks(clients: Int) {
+    private fun updateLocks(listening: Boolean) {
         val wifi = getSystemService(WifiManager::class.java)
-        if (clients > 0) {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        if (listening) {
             if (wifiLock == null) {
                 @Suppress("DEPRECATION")
-                wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "lantext:wifi")
+                wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "lantext:wifi").apply {
+                    setReferenceCounted(false)
+                }
             }
             if (wifiLock?.isHeld != true) wifiLock?.acquire()
+            if (!holdingWifiRequest) {
+                try {
+                    cm.requestNetwork(
+                        NetworkRequest.Builder()
+                            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                            .build(),
+                        keepWifiCallback,
+                    )
+                    holdingWifiRequest = true
+                } catch (t: Throwable) {
+                    android.util.Log.w("LanText", "Could not hold Wi-Fi network", t)
+                }
+            }
         } else {
             wifiLock?.let { if (it.isHeld) it.release() }
+            if (holdingWifiRequest) {
+                try {
+                    cm.unregisterNetworkCallback(keepWifiCallback)
+                } catch (_: Exception) {
+                }
+                holdingWifiRequest = false
+            }
         }
     }
 

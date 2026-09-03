@@ -95,13 +95,15 @@ computer you are sitting in front of.
 
 ## Battery
 
-The LAN server is a foreground service, and only while web access is enabled
-**and** you are on an allowed network. LanText does not poll SMS; it watches
-the system provider.
+The LAN server is a foreground service while web access is enabled. On an
+allowed Wi-Fi it holds a Wi-Fi lock so the phone can still accept
+connections after you power the computer off (for example a reverse proxy
+at `lantext.lan`). LanText does not poll SMS; it watches the system provider.
 
-On Xiaomi, Huawei, Samsung, Oppo, and similar devices, set **Battery →
-Unrestricted** for LanText. Otherwise the OEM may kill the listener the
-moment the screen turns off.
+On Pixel, Xiaomi, Huawei, Samsung, Oppo, and similar devices, set
+**Battery → Unrestricted** for LanText. Otherwise the OEM may kill the
+listener the moment the screen turns off. A DHCP reservation on the phone
+keeps the reverse-proxy upstream address stable.
 
 ## Limits of not being the default SMS app
 

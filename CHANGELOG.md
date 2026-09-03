@@ -10,6 +10,14 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the LAN listener reachable overnight with no computer connected:
+  hold the Wi-Fi lock while web access is listening (not only while a
+  browser is open), and keep the foreground service running on an allowed
+  network so a reverse proxy such as `lantext.lan` does not return HTTP 502
+  after the PC is powered off.
+
 ### Changed
 
 - F-Droid draft recipe is exclusive upstream-signed reproducible builds

@@ -61,9 +61,14 @@ class GatewayController(
         if (listening) {
             ensureService()
         } else {
-            context.stopService(Intent(context, GatewayService::class.java))
+            stopServer()
+            if (settings.enabled) {
+                ensureService()
+            } else {
+                context.stopService(Intent(context, GatewayService::class.java))
+            }
         }
-        val url = if (listening && ip != null) "https://$ip:${settings.listenPort}" else null
+        val url = if (listening) "https://$ip:${settings.listenPort}" else null
         _snapshot.value = GatewaySnapshot(
             enabled = settings.enabled,
             listening = listening && server != null,
@@ -73,7 +78,7 @@ class GatewayController(
             url = url,
             fingerprintSha256 = certs.fingerprintSha256.ifBlank { null },
             pairingPin = if (listening) pin else null,
-            reason = if (listening && ip == null) GateReason.NO_WIFI else reason,
+            reason = reason,
             clientCount = clients,
         )
         ToggleWidget.updateAll(context, _snapshot.value)
