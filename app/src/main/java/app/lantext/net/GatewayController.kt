@@ -63,10 +63,13 @@ class GatewayController(
     @Synchronized
     fun refresh(settings: AppSettings = _lastSettings, pin: String? = pairing.pairingPin.value, clients: Int = clientCount.value) {
         _lastSettings = settings
+        val previous = _snapshot.value
         val reason = WifiGate.evaluate(context, settings)
         val ssid = WifiGate.currentSsid(context)
         val ip = WifiGate.wifiIpv4(context)
-        val boundIp = _snapshot.value.bindAddress
+        val boundIp = previous.bindAddress
+        // Same bound IPv4 with a momentarily hidden SSID is still the LAN we
+        // already opened. A different IPv4 must prove its SSID before listen.
         val keepOnSameIp = server != null &&
             ip != null &&
             ip == boundIp &&
@@ -80,7 +83,11 @@ class GatewayController(
         if (listening) {
             stopDebounceArmed = false
             mainHandler.removeCallbacks(stopIfStillIneligible)
-            ensureService()
+            val bindChanged = server == null ||
+                !previous.listening ||
+                previous.bindAddress != ip ||
+                previous.port != settings.listenPort
+            if (bindChanged) ensureService()
         } else if (transientDrop && !stopDebounceArmed) {
             mainHandler.removeCallbacks(stopIfStillIneligible)
             mainHandler.postDelayed(stopIfStillIneligible, STOP_DEBOUNCE_MS)
@@ -95,7 +102,7 @@ class GatewayController(
             }
         }
         val url = if (listening) "https://$ip:${settings.listenPort}" else null
-        _snapshot.value = GatewaySnapshot(
+        val snap = GatewaySnapshot(
             enabled = settings.enabled,
             listening = listening && server != null,
             ssid = ssid,
@@ -107,7 +114,10 @@ class GatewayController(
             reason = reason,
             clientCount = clients,
         )
-        ToggleWidget.updateAll(context, _snapshot.value)
+        if (snap != previous) {
+            _snapshot.value = snap
+            ToggleWidget.updateAll(context, snap)
+        }
     }
 
     @Synchronized

@@ -24,6 +24,13 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
   WebSocket drop does not interrupt typing. The events socket no longer uses
   NanoHTTPD’s 5-second read timeout.
 
+### Changed
+
+- Remembered SSID is reused only for the same Wi-Fi IPv4, so a hidden name
+  cannot follow the phone onto another network. Wi-Fi re-evaluation skips
+  RSSI-only callbacks, and the known-SSID list is not rewritten on every
+  sighting. Content-Security-Policy `connect-src` is `'self'` only.
+
 ## [0.2.4] — 2026-08-30
 
 Sideload build for testers.

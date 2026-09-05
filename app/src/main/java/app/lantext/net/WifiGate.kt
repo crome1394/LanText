@@ -20,16 +20,29 @@ object WifiGate {
     @Volatile var lastSsid: String? = null
         private set
 
+    @Volatile var lastSsidIpv4: String? = null
+        private set
+
     @Volatile private var lastLinkNetwork: Network? = null
     @Volatile private var lastLink: LinkProperties? = null
 
-    fun remember(ssid: String?) {
+    fun remember(ssid: String?, ipv4: String? = null) {
         if (ssid == null) {
             lastSsid = null
+            lastSsidIpv4 = null
             return
         }
         // A redacted "<unknown ssid>" must not wipe a name we already learned.
-        normalizeSsid(ssid)?.let { lastSsid = it }
+        val clean = normalizeSsid(ssid) ?: return
+        lastSsid = clean
+        if (ipv4 != null) lastSsidIpv4 = ipv4
+    }
+
+    fun rememberedSsidFor(ipv4: String?): String? {
+        val name = lastSsid ?: return null
+        val bound = lastSsidIpv4 ?: return null
+        if (ipv4 != null && ipv4 == bound) return name
+        return null
     }
 
     fun rememberLink(network: Network, link: LinkProperties) {
@@ -47,15 +60,14 @@ object WifiGate {
     fun isOnWifi(context: Context): Boolean = wifiStaNetwork(context) != null
 
     fun currentSsid(context: Context): String? {
+        val ip = wifiIpv4(context)
         readVisibleSsid(context)?.let {
-            lastSsid = it
+            remember(it, ip)
             return it
         }
-        // Keep the last good name while we are still on Wi-Fi (or still have a
-        // station IPv4). Android often redacts the SSID for a moment after
-        // airplane mode, a MAC change, or while the app is in the background.
-        if (isOnWifi(context) || wifiIpv4(context) != null) return lastSsid
-        return null
+        // Only reuse a remembered name on the same station IPv4. Otherwise a
+        // redacted SSID on a different LAN would look like the allowlist.
+        return rememberedSsidFor(ip)
     }
 
     fun readVisibleSsid(context: Context): String? {
@@ -221,14 +233,4 @@ object WifiGate {
     }
 }
 
-fun wifiInfoFrom(network: Network, context: Context): WifiInfo? {
-    val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
-    val caps = cm.getNetworkCapabilities(network) ?: return null
-    if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        caps.transportInfo as? WifiInfo
-    } else {
-        @Suppress("DEPRECATION")
-        context.getSystemService(WifiManager::class.java)?.connectionInfo
-    }
-}
+

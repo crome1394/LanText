@@ -265,17 +265,6 @@ function scheduleReconnect() {
   }, delay);
 }
 
-async function pingPhone() {
-  try {
-    const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
-    if (!res.ok) return false;
-    const meta = await res.json();
-    return !!meta;
-  } catch (_) {
-    return false;
-  }
-}
-
 async function enterApp() {
   await api("/api/v1/session");
   showApp();
@@ -311,6 +300,12 @@ async function reconnectToPhone() {
 }
 
 function showPair() {
+  wantEvents = false;
+  eventGen += 1;
+  if (socket) {
+    try { socket.close(); } catch (_) {}
+    socket = null;
+  }
   pairView.hidden = false;
   appView.hidden = true;
   closeNewModal();
@@ -875,8 +870,10 @@ function connectEvents() {
   socket = new WebSocket(proto + "//" + location.host + "/api/v1/events" + q);
   socket.onopen = () => {
     if (gen !== eventGen) return;
+    const recovered = !phoneReachable;
     connLabel.textContent = "Live";
-    if (!phoneReachable) markLive();
+    if (recovered) markLive();
+    if (recovered) loadInbox().catch(() => {});
   };
   socket.onclose = () => {
     if (gen !== eventGen) return;

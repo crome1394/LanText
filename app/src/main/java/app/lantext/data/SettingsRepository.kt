@@ -68,6 +68,7 @@ class SettingsRepository(context: Context) {
     suspend fun rememberSsid(ssid: String) {
         val clean = ssid.trim().trim('"')
         if (clean.isEmpty() || clean == UNKNOWN_SSID) return
+        if (clean in current().knownSsids) return
         store.edit { prefs ->
             prefs[KEY_KNOWN] = (prefs[KEY_KNOWN] ?: emptySet()) + clean
         }

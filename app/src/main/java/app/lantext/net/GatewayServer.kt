@@ -18,6 +18,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -317,7 +319,7 @@ class GatewayServer(
                 "Content-Security-Policy",
                 "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; " +
                     "style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; " +
-                    "connect-src 'self' wss: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                    "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )
             res.addHeader("Cache-Control", if (cacheable) "no-cache" else "no-store")
         }
@@ -355,6 +357,7 @@ class GatewayServer(
     private inner class EventSocket(handshake: NanoHTTPD.IHTTPSession) : NanoWSD.WebSocket(handshake) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private var job: Job? = null
+        private var counted = false
 
         override fun onOpen() {
             val header = handshakeRequest.headers["authorization"]
@@ -372,7 +375,18 @@ class GatewayServer(
                 return
             }
             clientCount.value = connected.incrementAndGet()
+            counted = true
             job = scope.launch {
+                launch {
+                    while (isActive) {
+                        delay(PING_INTERVAL_MS)
+                        try {
+                            ping(ByteArray(0))
+                        } catch (_: Exception) {
+                            break
+                        }
+                    }
+                }
                 sms.events.collect { payload ->
                     try {
                         send(payload)
@@ -385,15 +399,21 @@ class GatewayServer(
         override fun onClose(code: NanoWSD.WebSocketFrame.CloseCode?, reason: String?, initiatedByRemote: Boolean) {
             job?.cancel()
             scope.cancel()
-            clientCount.value = connected.updateAndGet { (it - 1).coerceAtLeast(0) }
+            if (counted) {
+                counted = false
+                clientCount.value = connected.updateAndGet { (it - 1).coerceAtLeast(0) }
+            }
         }
 
         override fun onMessage(message: NanoWSD.WebSocketFrame?) = Unit
         override fun onPong(pong: NanoWSD.WebSocketFrame?) = Unit
-        override fun onException(exception: java.io.IOException?) = Unit
+        override fun onException(exception: java.io.IOException?) {
+            job?.cancel()
+        }
     }
 
     companion object {
         const val COOKIE = "lt_session"
+        private const val PING_INTERVAL_MS = 120_000L
     }
 }

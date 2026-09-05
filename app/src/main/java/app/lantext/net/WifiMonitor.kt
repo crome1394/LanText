@@ -48,9 +48,9 @@ class WifiMonitor(
         }
 
     private var wifiStateReceiver: BroadcastReceiver? = null
-    private var forgetSsidRunnable: Runnable? = null
     private var retrySsidRunnable: Runnable? = null
     private var retryStep = 0
+    private var lastEvalKey: String? = null
 
     @RequiresApi(Build.VERSION_CODES.S)
     private inner class LocationAwareCallback : ConnectivityManager.NetworkCallback(
@@ -77,6 +77,7 @@ class WifiMonitor(
             cm.unregisterNetworkCallback(callback)
         } catch (_: Exception) {
         }
+        lastEvalKey = null
         register()
     }
 
@@ -85,7 +86,7 @@ class WifiMonitor(
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .build()
         cm.registerNetworkCallback(request, callback)
-        readAndRememberSsid()
+        persistVisibleSsid()
         reevaluate()
         if (WifiGate.lastSsid == null && WifiGate.isOnWifi(context)) {
             scheduleSsidRetry()
@@ -98,10 +99,9 @@ class WifiMonitor(
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 when (intent?.action) {
                     WifiManager.WIFI_STATE_CHANGED_ACTION,
-                    WifiManager.NETWORK_STATE_CHANGED_ACTION,
                     Intent.ACTION_AIRPLANE_MODE_CHANGED,
                     -> {
-                        readAndRememberSsid()
+                        persistVisibleSsid()
                         reevaluate()
                         if (WifiGate.lastSsid == null) scheduleSsidRetry()
                     }
@@ -110,7 +110,6 @@ class WifiMonitor(
         }
         val filter = IntentFilter().apply {
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
         }
         ContextCompat.registerReceiver(
@@ -123,28 +122,23 @@ class WifiMonitor(
     }
 
     private fun onCaps(caps: NetworkCapabilities) {
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            val fromCallback = WifiGate.normalizeSsid((caps.transportInfo as? WifiInfo)?.ssid)
-            @Suppress("DEPRECATION")
-            val fromManager = WifiGate.normalizeSsid(
-                context.getSystemService(WifiManager::class.java)?.connectionInfo?.ssid,
-            )
-            val ssid = fromCallback ?: fromManager
-            if (ssid != null) {
-                WifiGate.remember(ssid)
-                scope.launch { settings.rememberSsid(ssid) }
-                cancelSsidRetry()
-            } else if (WifiGate.lastSsid == null) {
-                scheduleSsidRetry()
-            }
+        if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return
+        val fromCallback = WifiGate.normalizeSsid((caps.transportInfo as? WifiInfo)?.ssid)
+        @Suppress("DEPRECATION")
+        val fromManager = WifiGate.normalizeSsid(
+            context.getSystemService(WifiManager::class.java)?.connectionInfo?.ssid,
+        )
+        val ssid = fromCallback ?: fromManager
+        if (ssid != null) {
+            persistSsid(ssid)
+        } else if (WifiGate.lastSsid == null) {
+            scheduleSsidRetry()
         }
-        reevaluate()
     }
 
     private fun onWifiAvailable(network: Network) {
-        cancelForgetSsid()
         cm.getLinkProperties(network)?.let { WifiGate.rememberLink(network, it) }
-        readAndRememberSsid()
+        persistVisibleSsid()
         reevaluate()
         if (WifiGate.lastSsid == null) scheduleSsidRetry()
     }
@@ -152,31 +146,22 @@ class WifiMonitor(
     private fun onWifiLost(network: Network) {
         WifiGate.forgetLink(network)
         reevaluate()
-        scheduleForgetSsid()
     }
 
-    private fun readAndRememberSsid() {
+    private fun persistVisibleSsid() {
         val ssid = WifiGate.readVisibleSsid(context) ?: return
-        WifiGate.remember(ssid)
-        scope.launch { settings.rememberSsid(ssid) }
+        persistSsid(ssid)
+    }
+
+    private fun persistSsid(ssid: String) {
+        val previous = WifiGate.lastSsid
+        val ip = WifiGate.wifiIpv4(context)
+        WifiGate.remember(ssid, ip)
         cancelSsidRetry()
-    }
-
-    private fun scheduleForgetSsid() {
-        forgetSsidRunnable?.let { mainHandler.removeCallbacks(it) }
-        val r = Runnable {
-            if (!WifiGate.isOnWifi(context) && WifiGate.wifiIpv4(context) == null) {
-                WifiGate.remember(null)
-                reevaluate()
-            }
+        if (ssid != previous) {
+            scope.launch { settings.rememberSsid(ssid) }
         }
-        forgetSsidRunnable = r
-        mainHandler.postDelayed(r, FORGET_SSID_DELAY_MS)
-    }
-
-    private fun cancelForgetSsid() {
-        forgetSsidRunnable?.let { mainHandler.removeCallbacks(it) }
-        forgetSsidRunnable = null
+        reevaluate()
     }
 
     private fun scheduleSsidRetry() {
@@ -184,7 +169,7 @@ class WifiMonitor(
         retryStep = 0
         val r = object : Runnable {
             override fun run() {
-                readAndRememberSsid()
+                persistVisibleSsid()
                 reevaluate()
                 if (WifiGate.lastSsid == null &&
                     (WifiGate.isOnWifi(context) || WifiGate.wifiIpv4(context) != null) &&
@@ -209,11 +194,13 @@ class WifiMonitor(
     }
 
     private fun reevaluate() {
+        val key = "${WifiGate.lastSsid}|${WifiGate.lastSsidIpv4}|${WifiGate.wifiIpv4(context)}|${WifiGate.isOnWifi(context)}"
+        if (key == lastEvalKey) return
+        lastEvalKey = key
         gateway.onNetworkChanged()
     }
 
     companion object {
-        private const val FORGET_SSID_DELAY_MS = 5_000L
         private val SSID_RETRY_DELAYS_MS = longArrayOf(500L, 2_000L, 5_000L, 15_000L)
     }
 }
