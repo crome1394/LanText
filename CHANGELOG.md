@@ -12,7 +12,9 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ### Added
 
-- Emoji picker on the web composer (thread and new message).
+- Emoji picker on the web composer (thread and new message). Type a
+  Google Meet-style shortcut such as `:lol` and press Tab or Enter to
+  insert without clicking. Hover an emoji to see its command.
 - Choosing a web appearance updates the home-screen widget colors.
 - Desktop notification permission is requested when the inbox loads; the
   enable banner remains if the browser still needs a click.

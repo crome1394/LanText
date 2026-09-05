@@ -418,15 +418,15 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 2px;
-  max-height: 180px;
-  overflow: auto;
   margin: 6px 0 4px;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--bg);
+  overflow: visible;
 }
 .emoji-panel button {
+  position: relative;
   border: 0;
   background: transparent;
   border-radius: 8px;
@@ -435,6 +435,42 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
   padding: 2px;
 }
 .emoji-panel button:hover { background: var(--incoming); }
+.emoji-panel:not(.suggest) button:hover::after,
+.emoji-panel:not(.suggest) button:focus-visible::after {
+  content: attr(data-cmd);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  padding: 4px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+.emoji-panel.suggest {
+  grid-template-columns: 1fr;
+  max-height: 220px;
+}
+.emoji-panel.suggest button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  font-size: 1.15rem;
+  text-align: left;
+}
+.emoji-panel.suggest button.active { background: var(--incoming); }
+.emoji-cmd {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
 #lightbox {
   position: fixed;
   inset: 0;

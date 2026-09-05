@@ -52,9 +52,62 @@ const emojiPanel = document.getElementById("emoji-panel");
 const emojiBtn = document.getElementById("emoji-btn");
 const pdfBtn = document.getElementById("pdf-btn");
 const EMOJI = [
-  "😀","😁","😂","🤣","😊","😇","🙂","😉","😍","😘","😜","🤔","🙄","😏","😢","😭","😤","😡",
-  "🤯","😱","😴","🤗","🙌","👍","👎","👏","🙏","💪","🔥","❤️","💯","✨","🎉","✅","❌","⭐",
-  "👋","🤝","👀","💬","📱","💻","🏠","☀️","🌙","🌧️","☕","🍕","🍰","🎵","📸","💡","🔒","📍","🚗","✈️",
+  { glyph: "😂", names: ["lol", "joy", "laugh"] },
+  { glyph: "🤣", names: ["rofl", "rolling"] },
+  { glyph: "😀", names: ["grinning", "grin"] },
+  { glyph: "😁", names: ["beaming", "grin2"] },
+  { glyph: "😊", names: ["blush", "smile"] },
+  { glyph: "😇", names: ["innocent", "halo"] },
+  { glyph: "🙂", names: ["slight_smile"] },
+  { glyph: "😉", names: ["wink"] },
+  { glyph: "😍", names: ["heart_eyes", "love"] },
+  { glyph: "😘", names: ["kiss"] },
+  { glyph: "😜", names: ["stuck_out_tongue", "winky"] },
+  { glyph: "🤔", names: ["thinking", "think"] },
+  { glyph: "🙄", names: ["eyeroll", "rolling_eyes"] },
+  { glyph: "😏", names: ["smirk"] },
+  { glyph: "😢", names: ["cry", "sad"] },
+  { glyph: "😭", names: ["sob", "bawling"] },
+  { glyph: "😤", names: ["huff", "triumph"] },
+  { glyph: "😡", names: ["rage", "angry"] },
+  { glyph: "🤯", names: ["exploding_head", "mindblown"] },
+  { glyph: "😱", names: ["scream", "shocked"] },
+  { glyph: "😴", names: ["sleep", "zzz"] },
+  { glyph: "🤗", names: ["hug", "hugging"] },
+  { glyph: "🙌", names: ["raised_hands", "hooray"] },
+  { glyph: "👍", names: ["thumbsup", "yes", "+1"] },
+  { glyph: "👎", names: ["thumbsdown", "no", "-1"] },
+  { glyph: "👏", names: ["clap", "applause"] },
+  { glyph: "🙏", names: ["pray", "thanks", "please"] },
+  { glyph: "💪", names: ["muscle", "flex"] },
+  { glyph: "🔥", names: ["fire", "lit"] },
+  { glyph: "❤️", names: ["heart", "red_heart", "love_heart"] },
+  { glyph: "💯", names: ["100", "hundred"] },
+  { glyph: "✨", names: ["sparkles", "stars"] },
+  { glyph: "🎉", names: ["tada", "party", "celebrate"] },
+  { glyph: "✅", names: ["check", "done", "white_check_mark"] },
+  { glyph: "❌", names: ["x", "cross"] },
+  { glyph: "⭐", names: ["star"] },
+  { glyph: "👋", names: ["wave", "hello", "hi"] },
+  { glyph: "🤝", names: ["handshake", "deal"] },
+  { glyph: "👀", names: ["eyes", "look"] },
+  { glyph: "💬", names: ["speech", "comment"] },
+  { glyph: "📱", names: ["iphone", "phone"] },
+  { glyph: "💻", names: ["computer", "laptop"] },
+  { glyph: "🏠", names: ["house", "home"] },
+  { glyph: "☀️", names: ["sun", "sunny"] },
+  { glyph: "🌙", names: ["moon"] },
+  { glyph: "🌧️", names: ["rain", "cloud_rain"] },
+  { glyph: "☕", names: ["coffee"] },
+  { glyph: "🍕", names: ["pizza"] },
+  { glyph: "🍰", names: ["cake"] },
+  { glyph: "🎵", names: ["music"] },
+  { glyph: "📸", names: ["camera"] },
+  { glyph: "💡", names: ["bulb", "idea"] },
+  { glyph: "🔒", names: ["lock"] },
+  { glyph: "📍", names: ["pin", "location"] },
+  { glyph: "🚗", names: ["car"] },
+  { glyph: "✈️", names: ["airplane", "plane"] },
 ];
 
 let token = localStorage.getItem(TOKEN_KEY) || "";
@@ -358,7 +411,7 @@ function openNewModal() {
 
 function closeNewModal() {
   newModal.hidden = true;
-  if (emojiPanel) emojiPanel.hidden = true;
+  hideEmojiPanel();
 }
 
 function openHelp() { helpModal.hidden = false; }
@@ -635,6 +688,10 @@ lightbox.addEventListener("click", closeLightbox);
 composeText.addEventListener("input", () => {
   composeText.style.height = "auto";
   composeText.style.height = Math.min(composeText.scrollHeight, 160) + "px";
+  updateEmojiSuggest(composeText);
+});
+document.getElementById("new-body").addEventListener("input", () => {
+  updateEmojiSuggest(document.getElementById("new-body"));
 });
 
 function imageFromClipboard(e) {
@@ -696,32 +753,154 @@ newModal.addEventListener("drop", (e) => {
 });
 
 document.getElementById("attach-btn").addEventListener("click", () => fileInput.click());
-function insertEmoji(textarea, emoji) {
-  const start = textarea.selectionStart ?? textarea.value.length;
-  const end = textarea.selectionEnd ?? start;
-  textarea.value = textarea.value.slice(0, start) + emoji + textarea.value.slice(end);
-  const pos = start + emoji.length;
+let emojiMode = "";
+let emojiSel = 0;
+let emojiHits = [];
+let emojiToken = null;
+
+function emojiCommand(item) {
+  return ":" + item.names[0] + ":";
+}
+function insertEmoji(textarea, glyph, from, to) {
+  const start = from ?? textarea.selectionStart ?? textarea.value.length;
+  const end = to ?? textarea.selectionEnd ?? start;
+  textarea.value = textarea.value.slice(0, start) + glyph + textarea.value.slice(end);
+  const pos = start + glyph.length;
   textarea.selectionStart = textarea.selectionEnd = pos;
   textarea.focus();
+  hideEmojiPanel();
   textarea.dispatchEvent(new Event("input"));
 }
-function fillEmojiPanel() {
-  if (!emojiPanel || emojiPanel.childElementCount) return;
-  for (const glyph of EMOJI) {
+function hideEmojiPanel() {
+  if (!emojiPanel) return;
+  emojiPanel.hidden = true;
+  emojiMode = "";
+  emojiToken = null;
+}
+function colonToken(textarea) {
+  const pos = textarea.selectionStart;
+  if (pos !== textarea.selectionEnd) return null;
+  const before = textarea.value.slice(0, pos);
+  const m = before.match(/(^|[\s\n]):([a-zA-Z+][a-zA-Z0-9_+]*)(:)?$/);
+  if (!m) return null;
+  const query = m[2];
+  const closed = !!m[3];
+  const start = pos - 1 - query.length - (closed ? 1 : 0);
+  return { start, end: pos, query: query.toLowerCase(), closed };
+}
+function matchEmoji(query) {
+  const q = query.toLowerCase();
+  const exact = [];
+  const prefix = [];
+  const inner = [];
+  for (const item of EMOJI) {
+    if (item.names.some((n) => n === q)) exact.push(item);
+    else if (item.names.some((n) => n.startsWith(q))) prefix.push(item);
+    else if (item.names.some((n) => n.includes(q))) inner.push(item);
+  }
+  return exact.concat(prefix, inner).slice(0, 12);
+}
+function renderEmojiPanel(items, mode) {
+  emojiPanel.innerHTML = "";
+  emojiPanel.classList.toggle("suggest", mode === "suggest");
+  emojiMode = mode;
+  emojiHits = items;
+  items.forEach((item, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = glyph;
+    const cmd = emojiCommand(item);
+    btn.dataset.cmd = item.names.map((n) => ":" + n + ":").join("  ");
+    btn.title = btn.dataset.cmd;
+    if (mode === "suggest") {
+      btn.innerHTML = `<span class="emoji-glyph">${item.glyph}</span><span class="emoji-cmd">${escapeHtml(cmd)}</span>`;
+      btn.classList.toggle("active", i === emojiSel);
+    } else {
+      btn.textContent = item.glyph;
+    }
     btn.addEventListener("click", () => {
-      const target = !newModal.hidden ? document.getElementById("new-body") : composeText;
-      insertEmoji(target, glyph);
+      const target = emojiToken?.textarea || (!newModal.hidden ? document.getElementById("new-body") : composeText);
+      if (emojiToken && emojiToken.textarea === target) {
+        insertEmoji(target, item.glyph, emojiToken.start, emojiToken.end);
+      } else {
+        insertEmoji(target, item.glyph);
+      }
     });
     emojiPanel.appendChild(btn);
+  });
+}
+function setEmojiSel(index) {
+  if (!emojiHits.length) return;
+  emojiSel = (index + emojiHits.length) % emojiHits.length;
+  [...emojiPanel.children].forEach((btn, i) => btn.classList.toggle("active", i === emojiSel));
+  emojiPanel.children[emojiSel]?.scrollIntoView({ block: "nearest" });
+}
+function commitEmojiSuggest(textarea) {
+  const item = emojiHits[emojiSel];
+  if (!item || !emojiToken) return;
+  insertEmoji(textarea, item.glyph, emojiToken.start, emojiToken.end);
+}
+function updateEmojiSuggest(textarea) {
+  const token = colonToken(textarea);
+  if (!token) {
+    if (emojiMode === "suggest") hideEmojiPanel();
+    return;
   }
+  const hits = matchEmoji(token.query);
+  if (!hits.length) {
+    if (emojiMode === "suggest") hideEmojiPanel();
+    return;
+  }
+  if (token.closed) {
+    const exact = hits.find((item) => item.names.includes(token.query));
+    if (exact) {
+      insertEmoji(textarea, exact.glyph, token.start, token.end);
+      return;
+    }
+  }
+  emojiToken = { ...token, textarea };
+  emojiSel = 0;
+  const host = textarea.closest(".compose-main") || textarea.closest("form");
+  if (host) host.insertBefore(emojiPanel, textarea.nextSibling);
+  renderEmojiPanel(hits, "suggest");
+  emojiPanel.hidden = false;
+}
+function handleEmojiKeys(e, textarea) {
+  if (emojiPanel.hidden || emojiMode !== "suggest") return false;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    setEmojiSel(emojiSel + 1);
+    return true;
+  }
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    setEmojiSel(emojiSel - 1);
+    return true;
+  }
+  if (e.key === "Tab" || e.key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    commitEmojiSuggest(textarea);
+    return true;
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    hideEmojiPanel();
+    return true;
+  }
+  return false;
+}
+function fillEmojiPanel() {
+  emojiToken = null;
+  renderEmojiPanel(EMOJI, "browse");
 }
 emojiBtn.addEventListener("click", () => {
+  if (!emojiPanel.hidden && emojiMode === "browse") {
+    hideEmojiPanel();
+    return;
+  }
   fillEmojiPanel();
   composeText.closest(".compose-main").appendChild(emojiPanel);
-  emojiPanel.hidden = !emojiPanel.hidden;
+  emojiPanel.hidden = false;
 });
 document.getElementById("new-emoji-btn").addEventListener("click", () => {
   fillEmojiPanel();
@@ -810,6 +989,7 @@ function wantsSend(e) {
 }
 
 composeText.addEventListener("keydown", (e) => {
+  if (handleEmojiKeys(e, composeText)) return;
   if (wantsSend(e)) {
     e.preventDefault();
     composeForm.requestSubmit();
@@ -817,6 +997,7 @@ composeText.addEventListener("keydown", (e) => {
 });
 
 newBody.addEventListener("keydown", (e) => {
+  if (handleEmojiKeys(e, newBody)) return;
   if (wantsSend(e)) {
     e.preventDefault();
     newForm.requestSubmit();
