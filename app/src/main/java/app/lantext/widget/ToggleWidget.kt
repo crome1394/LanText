@@ -6,10 +6,13 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.os.Build
 import android.widget.RemoteViews
 import app.lantext.LanTextApp
 import app.lantext.MainActivity
 import app.lantext.R
+import app.lantext.data.AppSettings
 import app.lantext.data.GatewaySnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +57,27 @@ class ToggleWidget : AppWidgetProvider() {
 
         private fun views(context: Context, snap: GatewaySnapshot): RemoteViews {
             val remote = RemoteViews(context.packageName, R.layout.widget_toggle)
+            val colors = WidgetTheme.colors(
+                context,
+                AppSettings(webPalette = snap.webPalette, webMode = snap.webMode),
+            )
+            remote.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_background)
+            remote.setInt(R.id.widget_toggle, "setBackgroundResource", R.drawable.widget_button)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                remote.setColorStateList(
+                    R.id.widget_root,
+                    "setBackgroundTintList",
+                    ColorStateList.valueOf(colors.background),
+                )
+                remote.setColorStateList(
+                    R.id.widget_toggle,
+                    "setBackgroundTintList",
+                    ColorStateList.valueOf(colors.button),
+                )
+            }
+            remote.setTextColor(R.id.widget_title, colors.title)
+            remote.setTextColor(R.id.widget_status, colors.status)
+            remote.setTextColor(R.id.widget_toggle, colors.buttonText)
             val status = when {
                 !snap.enabled -> context.getString(R.string.widget_off)
                 snap.listening -> context.getString(R.string.widget_listening, snap.ssid ?: "Wi-Fi")

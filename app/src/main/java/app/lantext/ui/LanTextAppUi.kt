@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -78,7 +79,7 @@ import app.lantext.util.ListenPort
 import java.text.DateFormat
 import java.util.Date
 
-private enum class Dest { Home, Networks, Paired, About }
+private enum class Dest { Home, Networks, Paired, Settings, About }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,6 +94,8 @@ fun LanTextAppUi(
     onFinishOnboarding: () -> Unit,
     onEnabled: (Boolean) -> Unit,
     onListenPort: (Int) -> Unit,
+    onGifEnabled: (Boolean) -> Unit,
+    onVoiceEnabled: (Boolean) -> Unit,
     onAddCurrent: () -> Unit,
     onAddNetwork: (String) -> Unit,
     onRemoveNetwork: (String) -> Unit,
@@ -139,6 +142,7 @@ fun LanTextAppUi(
                             Dest.Home -> "LanText"
                             Dest.Networks -> "Wi-Fi networks"
                             Dest.Paired -> "Paired computers"
+                            Dest.Settings -> "Settings"
                             Dest.About -> "About"
                         },
                     )
@@ -163,6 +167,7 @@ fun LanTextAppUi(
                 onListenPort = onListenPort,
                 onNetworks = { dest = Dest.Networks },
                 onPaired = { dest = Dest.Paired },
+                onSettings = { dest = Dest.Settings },
                 onAbout = { dest = Dest.About },
                 onAddCurrent = onAddCurrent,
                 onRecyclePairing = onRecyclePairing,
@@ -180,6 +185,12 @@ fun LanTextAppUi(
                 modifier = Modifier.padding(padding),
                 devices = devices,
                 onRevoke = onRevoke,
+            )
+            Dest.Settings -> SettingsScreen(
+                modifier = Modifier.padding(padding),
+                settings = settings,
+                onGifEnabled = onGifEnabled,
+                onVoiceEnabled = onVoiceEnabled,
             )
             Dest.About -> AboutScreen(Modifier.padding(padding), permissions)
         }
@@ -269,6 +280,7 @@ private fun HomeScreen(
     onListenPort: (Int) -> Unit,
     onNetworks: () -> Unit,
     onPaired: () -> Unit,
+    onSettings: () -> Unit,
     onAbout: () -> Unit,
     onAddCurrent: () -> Unit,
     onRecyclePairing: () -> Unit,
@@ -362,6 +374,7 @@ private fun HomeScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NavButton(Modifier.weight(1f), "Networks", Icons.Outlined.Wifi, onNetworks)
             NavButton(Modifier.weight(1f), "Computers", Icons.Outlined.Devices, onPaired)
+            NavButton(Modifier.weight(1f), "Settings", Icons.Outlined.Settings, onSettings)
             NavButton(Modifier.weight(1f), "About", Icons.Outlined.Info, onAbout)
         }
     }
@@ -478,6 +491,57 @@ private fun PairedScreen(
                 trailingContent = { TextButton(onClick = { onRevoke(device.id) }) { Text("Revoke") } },
             )
         }
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    modifier: Modifier,
+    settings: AppSettings,
+    onGifEnabled: (Boolean) -> Unit,
+    onVoiceEnabled: (Boolean) -> Unit,
+) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Experimental", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "GIF search and voice notes are extras. Turn either off if you do not want them in the computer inbox. SMS and ordinary pictures stay available.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                ListItem(
+                    headlineContent = { Text("GIF search and send") },
+                    supportingContent = {
+                        Text("Look up GIFs from a public catalog and send them as MMS through your carrier. Experimental.")
+                    },
+                    trailingContent = {
+                        Switch(checked = settings.gifEnabled, onCheckedChange = onGifEnabled)
+                    },
+                )
+                HorizontalDivider()
+                ListItem(
+                    headlineContent = { Text("Voice messages") },
+                    supportingContent = {
+                        Text("Record a short voice note in the browser and send it as MMS. Experimental.")
+                    },
+                    trailingContent = {
+                        Switch(checked = settings.voiceEnabled, onCheckedChange = onVoiceEnabled)
+                    },
+                )
+            }
+        }
+        Text(
+            "Threads already keep GIFs and voice notes you received. These switches only hide sending from the computer.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -628,7 +692,7 @@ private const val CONTACTS_WHY =
 private const val NOTIFICATIONS_WHY =
     "On Android 13 and newer: pairing prompts, and the silent ongoing notice Android requires while the LAN server is a foreground service. Older Android does not prompt for this."
 private const val NEARBY_DEVICES_WHY =
-    "On Android 13 and newer only. Required to use the Wi-Fi APIs. Not a scan for headphones, speakers, or other phones."
+    "On Android 13 and newer only. Required so Android will tell LanText the Wi-Fi name while the listener runs in the background. Not a scan for headphones, speakers, or other phones."
 private const val LOCATION_WHY =
     "Required on every version LanText supports, including Android 13+. Android hides the current Wi-Fi name without it. Used only to compare that name to your allowlist. Coordinates are never read, stored, or sent."
 private const val NETWORK_WHY =
@@ -640,6 +704,7 @@ private val LAN_OPERATOR_NOTES = listOf(
     "Use the IP URL from the home screen (for example https://192.168.1.42:8743). Names like lantext.local are not advertised on the network, so they will not resolve unless you add them in DNS or /etc/hosts. Even then, the certificate only lists the Wi-Fi IP, so a hostname in the browser will fail the name check.",
     "A DHCP reservation or static IP keeps the URL and QR stable when the phone reconnects.",
     "If you already run Caddy, HAProxy, or OPNsense on the LAN, reverse-proxy to the phone’s IP and port and serve lantext.local with an internal CA. Keep that proxy on private addresses only. Pairing (PIN plus Approve) still applies. Do not port-forward this to the internet.",
+    "If the computer sleeps or the phone is off the allowed Wi-Fi, Caddy returns HTTP 502 because the phone did not answer. After the first successful visit, the browser keeps a copy of the page and greys out with a Reconnect button instead of Chrome’s 502 screen.",
 )
 
 @Composable

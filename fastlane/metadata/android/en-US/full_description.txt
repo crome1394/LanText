@@ -10,8 +10,10 @@
 <ul>
 <li>Any OS, any modern browser</li>
 <li>Search conversations and contacts</li>
-<li>Enter to send, Shift+Enter for a new line</li>
+<li>Enter to send, Shift+Enter for a new line, :lol then Tab for emoji</li>
 <li>Paste, drop, or attach a picture — sent as MMS</li>
+<li>Optional GIF search and voice notes (experimental; toggle in Settings on the phone)</li>
+<li>Pin conversations, copy a number, contact details, download a thread as PDF</li>
 <li>Clickable links, desktop notifications, live updates</li>
 <li>Light, dark, and Auto appearance, plus color palettes</li>
 <li>Save unknown numbers as contacts, or add a second number to someone you already know</li>

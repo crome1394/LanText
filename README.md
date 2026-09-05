@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-1F8A70.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8%2B-156B57.svg)](#build)
 [![F-Droid](https://img.shields.io/badge/F--Droid-planned-156B57.svg)](F-DROID.md)
-[![version](https://img.shields.io/badge/version-0.2.4-14201a.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.2.5-14201a.svg)](CHANGELOG.md)
 [![source](https://img.shields.io/badge/github-crome1394%2FLanText-1F8A70.svg)](https://github.com/crome1394/LanText)
 
 ![LanText — SMS from your computer, never leaves your Wi-Fi](fastlane/metadata/android/en-US/images/featureGraphic.png)
@@ -53,11 +53,15 @@ trusted.
 
 - Two-pane inbox, search, contacts, unread dots
 - **Enter** sends, **Shift+Enter** is a new line
+- `:lol` then Tab inserts emoji (Meet-style shortcuts)
 - Paste, drop, or attach a picture — it goes out as MMS through the carrier
+- Optional GIF search and voice notes (MMS; experimental, off from **Settings** on the phone)
+- Pin conversations, copy a number, contact details, download a thread as PDF
 - Links in messages are clickable
 - Desktop notifications when a text arrives
+- If the computer wakes or the phone is off the LAN, the inbox greys out with a Reconnect button instead of a browser error
 - Save an unknown number as a contact, or add it to someone you already know
-- Appearance: Auto, Light, or Dark, plus palettes
+- Appearance: Auto, Light, or Dark, plus palettes (the home-screen widget follows)
 - Change the listen port (default 8743) if something else on your LAN uses it
 - A home-screen widget flips web access on and off without opening the app
 
@@ -143,8 +147,8 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 ```
 
 - minSdk 26 (Android 8), targetSdk 36
-- Current version: **0.2.4** (`versionCode` 6)
-- Latest git tag: **v0.2.4**
+- Current version: **0.2.5** (`versionCode` 7)
+- Latest git tag: **v0.2.5**
 - Application id: `app.lantext`
 - License: [Apache 2.0](LICENSE)
 

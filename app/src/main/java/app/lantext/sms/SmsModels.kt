@@ -15,6 +15,7 @@ data class ConversationDto(
     val recipients: List<String>,
     val avatarColor: String,
     val contactId: String? = null,
+    val pinned: Boolean = false,
 )
 
 @Serializable
@@ -49,6 +50,25 @@ data class ContactDto(
 )
 
 @Serializable
+data class LabeledValue(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class ContactDetailsDto(
+    val id: String?,
+    val name: String,
+    val photoUrl: String?,
+    val avatarColor: String,
+    val phones: List<LabeledValue> = emptyList(),
+    val emails: List<LabeledValue> = emptyList(),
+    val org: String? = null,
+    val title: String? = null,
+    val postal: String? = null,
+)
+
+@Serializable
 data class SendRequest(
     val recipients: List<String> = emptyList(),
     val body: String = "",
@@ -56,6 +76,17 @@ data class SendRequest(
     val subscriptionId: Int? = null,
     val imageBase64: String? = null,
     val imageMime: String? = null,
+    val mediaUrl: String? = null,
+)
+
+@Serializable
+data class GifHit(
+    val id: String,
+    val title: String,
+    val url: String,
+    val width: Int,
+    val height: Int,
+    val bytes: Int,
 )
 
 @Serializable
@@ -73,4 +104,15 @@ data class CreateContactRequest(
 @Serializable
 data class AddPhoneRequest(
     val number: String = "",
+)
+
+@Serializable
+data class AppearanceRequest(
+    val palette: String = "fern",
+    val mode: String = "auto",
+)
+
+@Serializable
+data class PinRequest(
+    val pinned: Boolean = true,
 )

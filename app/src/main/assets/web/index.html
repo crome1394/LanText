@@ -21,17 +21,17 @@
 </head>
 <body>
   <div id="app">
-    <section id="pair-view" class="view" hidden>
+    <section id="pair-view" class="view">
       <div class="pair-card">
         <h1>LanText</h1>
         <p class="lede">This page is served by your phone on your home Wi-Fi. Enter the PIN shown in the LanText app, then approve the request on the phone.</p>
         <p id="fp-line" class="fingerprint"></p>
-        <form id="pair-form">
+        <form id="pair-form" action="/" method="post">
           <label for="pin">Pairing PIN</label>
           <input id="pin" name="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]{8}" placeholder="00000000" required />
           <button type="submit" id="pair-btn">Pair this computer</button>
         </form>
-        <p id="pair-status" class="status"></p>
+        <p id="pair-status" class="status" role="status" aria-live="polite"></p>
         <button type="button" id="pair-theme-btn" class="text-btn">Appearance</button>
       </div>
     </section>
@@ -43,6 +43,7 @@
             <h1>LanText</h1>
             <p class="muted" id="conn-label">Connected</p>
           </div>
+          <button id="refresh-btn" class="icon-btn" title="Refresh inbox (Shift-click reloads the page)">↻</button>
           <button id="theme-btn" class="icon-btn" title="Appearance">Aa</button>
           <button id="new-btn" class="icon-btn" title="New message (Ctrl+N)">+</button>
         </header>
@@ -61,21 +62,34 @@
         <div id="thread-panel" hidden>
           <header class="thread-head">
             <button id="back-btn" class="icon-btn mobile-only" title="Back">‹</button>
-            <div id="thread-avatar" class="avatar"></div>
+            <div id="thread-avatar" class="avatar" role="button" tabindex="0" title="Contact details"></div>
             <div>
               <h2 id="thread-name"></h2>
               <p id="thread-number" class="muted"></p>
             </div>
+            <button type="button" id="copy-number-btn" class="text-btn" title="Copy phone number">Copy Number</button>
+            <button type="button" id="people-btn" class="text-btn" title="Contact details">Details</button>
+            <button type="button" id="pin-btn" class="text-btn" title="Pin this conversation">Pin</button>
+            <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">Download Thread</button>
             <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
           <div id="messages" class="messages"></div>
           <form id="composer">
-            <input id="file-input" type="file" accept="image/*" hidden />
-            <button type="button" id="attach-btn" class="icon-btn" title="Attach or paste a picture">📎</button>
+            <input id="file-input" type="file" accept="image/*,.gif,audio/*" hidden />
+            <button type="button" id="attach-btn" class="icon-btn" title="Attach a picture or GIF">📎</button>
+            <button type="button" id="gif-btn" class="icon-btn" title="GIF">GIF</button>
+            <button type="button" id="voice-btn" class="icon-btn" title="Record a voice message">🎤</button>
+            <button type="button" id="emoji-btn" class="icon-btn" title="Emoji">😊</button>
             <div class="compose-main">
               <div id="pending-preview" hidden></div>
-              <textarea id="compose-text" rows="1" placeholder="Message or paste a picture" title="Enter to send, Shift+Enter for a new line, paste an image to attach"></textarea>
-              <p class="compose-hint">Enter to send · paste or drop a picture to attach · Shift+Enter for a new line</p>
+              <textarea id="compose-text" rows="1" placeholder="Message, GIF, or voice note" title="Enter to send, Shift+Enter for a new line"></textarea>
+              <div id="emoji-panel" class="emoji-panel" hidden></div>
+              <div id="gif-panel" class="gif-panel" hidden>
+                <input id="gif-search" type="search" placeholder="Search GIFs" />
+                <p id="gif-status" class="muted" hidden></p>
+                <div id="gif-grid" class="gif-grid"></div>
+              </div>
+              <p class="compose-hint">Enter to send · :lol then Tab · GIF or 🎤 for MMS · Shift+Enter for a new line</p>
             </div>
             <button type="submit" id="send-btn" title="Send (Enter)">Send</button>
           </form>
@@ -92,11 +106,14 @@
         <input id="contact-search" type="search" placeholder="Name or number" />
         <div id="contact-list"></div>
         <form id="new-form">
-          <input id="new-file-input" type="file" accept="image/*" hidden />
+          <input id="new-file-input" type="file" accept="image/*,.gif,audio/*" hidden />
           <div id="new-pending-preview" hidden></div>
-          <textarea id="new-body" rows="3" placeholder="Message (Enter to send, paste a picture)"></textarea>
+          <textarea id="new-body" rows="3" placeholder="Message (Enter to send, paste a picture or GIF)"></textarea>
           <div class="new-actions">
-            <button type="button" id="new-attach-btn">Attach picture</button>
+            <button type="button" id="new-attach-btn">Attach</button>
+            <button type="button" id="new-gif-btn">GIF</button>
+            <button type="button" id="new-voice-btn">Voice</button>
+            <button type="button" id="new-emoji-btn">Emoji</button>
             <button type="submit">Send</button>
           </div>
         </form>
@@ -137,6 +154,15 @@
         <div class="theme-grid" id="theme-grid"></div>
       </div>
     </div>
+    <div id="people-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header>
+          <h2>People in this thread</h2>
+          <button type="button" id="close-people" class="icon-btn">×</button>
+        </header>
+        <div id="people-list"></div>
+      </div>
+    </div>
     <div id="contact-modal" class="modal" hidden>
       <div class="modal-card">
         <header>
@@ -160,6 +186,23 @@
           <button type="submit">Save</button>
         </form>
       </div>
+    </div>
+  </div>
+  <div id="convo-menu" class="convo-menu" hidden>
+    <button type="button" id="convo-menu-pin">Pin conversation</button>
+  </div>
+  <div id="gif-hover" hidden>
+    <img id="gif-hover-img" alt="" />
+  </div>
+  <div id="lightbox" hidden>
+    <img id="lightbox-img" alt="" />
+  </div>
+  <div id="disconnect-overlay" hidden>
+    <div class="disconnect-card" role="alertdialog" aria-labelledby="disconnect-title" aria-describedby="disconnect-copy">
+      <h2 id="disconnect-title">Can't reach the phone</h2>
+      <p id="disconnect-copy" class="lede">LanText is waiting for your phone on the LAN. That happens after this computer sleeps, the phone leaves Wi-Fi, or the listener is off.</p>
+      <p id="disconnect-status" class="status"></p>
+      <button type="button" id="reconnect-btn">Reconnect</button>
     </div>
   </div>
   <script src="/app.js"></script>

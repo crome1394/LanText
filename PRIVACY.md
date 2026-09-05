@@ -18,16 +18,19 @@ While web access is on **and** you are connected to a Wi-Fi name you allowed:
   contact.
 - Outgoing SMS and MMS go through your carrier, the same way they would from
   any messenger on the phone.
+- GIF search uses Openverse (Creative Commons) from the phone, then the
+  chosen GIF is sent as MMS. Voice notes are recorded in the browser and
+  sent as AMR over MMS. Neither uses a LanText cloud.
 
 Nothing is uploaded to a LanText server. There is no LanText server.
 
 ## Location
 
 LanText requests Nearby devices (Android 13+) and location so Android will
-reveal the current SSID. Location is still required for the live Wi-Fi name
-on current Pixels, even with Nearby devices. Coordinates are never read,
-stored, or sent. Nearby devices is not a scan for headphones, speakers, or
-other phones.
+reveal the current SSID, including while the listener runs in the background.
+Location is still required for the live Wi-Fi name on current Pixels, even
+with Nearby devices. Coordinates are never read, stored, or sent. Nearby
+devices is not a scan for headphones, speakers, or other phones.
 
 ## Certificates and pairing
 

@@ -10,6 +10,64 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-09-05
+
+Sideload build for testers.
+
+### Added
+
+- Emoji picker on the web composer. Type a Meet-style shortcut such as
+  `:lol` and press Tab or Enter to insert. Hover an emoji to see its
+  command.
+- Settings on the phone: GIF search and voice notes are experimental and
+  can be turned off. The computer inbox hides those controls immediately.
+- Pin a conversation from the thread header or by right-clicking it in
+  the list. Pinned threads stay at the top.
+- Copy Number, Details (everyone in the thread), and Download Thread (PDF
+  with dates and times). The contact photo opens Details.
+- Choosing a web appearance updates the home-screen widget colors.
+- Desktop notification permission is requested when the inbox loads.
+- Click a picture in a thread to expand it; click or Esc to close.
+- GIF search (Openverse / Wikimedia, small enough for MMS) and browser
+  voice notes sent as MMS. Paste or attach a `.gif` also works.
+
+### Fixed
+
+- After a full browser restart the inbox no longer stays blank while the
+  phone is still coming up: the UI paints immediately, boot fetch times
+  out, and a Refresh button reloads the inbox (Shift-click reloads the
+  page). Pairing no longer does a full page reload if a cached page is
+  missing the Refresh button, and a rejected PIN shows the reason.
+- Conversation search now keeps threads that match a keyword in an older
+  message (not only the latest snippet), and also searches MMS text.
+- Persist the last allowed SSID and its Wi-Fi IPv4 so the listener comes
+  back after a process restart when Android hides the network name in the
+  background (location is while-in-use only).
+- Resume the LAN listener after airplane mode, a MAC change, or a background
+  Wi-Fi reconnect. Nearby devices was declared `neverForLocation`, so Android
+  hid the SSID while LanText was in the background; the remembered network
+  name was also cleared on a momentary disconnect, which left a reverse proxy
+  such as `lantext.lan` returning HTTP 502.
+- Web inbox: if the phone is unreachable, grey out and show a Reconnect
+  button instead of a dead tab. A service worker keeps the page around so
+  Brave/Chrome tab restore after the computer sleeps does not replace LanText
+  with the browser’s HTTP 502 screen. The overlay waits 20 seconds so a brief
+  WebSocket drop does not interrupt typing. The events socket no longer uses
+  NanoHTTPD’s 5-second read timeout.
+- Emoji typed in the computer inbox (including `:lol`) is sent as Unicode
+  instead of four replacement characters.
+
+### Changed
+
+- Remembered SSID is reused only for the same Wi-Fi IPv4, so a hidden name
+  cannot follow the phone onto another network. That pair is also stored so
+  a process restart does not leave the listener stuck on “waiting for Wi-Fi”.
+  Wi-Fi re-evaluation skips RSSI-only callbacks, and the known-SSID list is
+  not rewritten on every sighting. Content-Security-Policy `connect-src` is
+  `'self'` only.
+- Home-screen widget Turn on / Turn off control uses the same pill shape
+  as other buttons.
+
 ## [0.2.4] — 2026-08-30
 
 Sideload build for testers.
@@ -119,6 +177,7 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.5]: #025--2026-09-05
 [0.2.4]: #024--2026-08-30
 [0.2.3]: #023--2026-08-30
 [0.2.2]: #022--2026-08-30

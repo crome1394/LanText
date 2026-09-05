@@ -1,6 +1,7 @@
 const TOKEN_KEY = "lantext_token";
 const THEME_PALETTE_KEY = "lantext_palette";
 const THEME_MODE_KEY = "lantext_mode";
+const INBOX_KEY = "lantext_inbox_cache";
 
 const PALETTES = [
   { id: "fern", name: "Fern", swatch: ["#156b57", "#1f8a70", "#f3f6f4"] },
@@ -17,6 +18,7 @@ const PALETTES = [
 const pairView = document.getElementById("pair-view");
 const appView = document.getElementById("app-view");
 const pairForm = document.getElementById("pair-form");
+const pairBtn = document.getElementById("pair-btn");
 const pairStatus = document.getElementById("pair-status");
 const fpLine = document.getElementById("fp-line");
 const convoList = document.getElementById("convo-list");
@@ -44,18 +46,257 @@ const notifyBanner = document.getElementById("notify-banner");
 const threadEl = document.getElementById("thread");
 const newFileInput = document.getElementById("new-file-input");
 const newPendingPreview = document.getElementById("new-pending-preview");
+const disconnectOverlay = document.getElementById("disconnect-overlay");
+const disconnectStatus = document.getElementById("disconnect-status");
+const reconnectBtn = document.getElementById("reconnect-btn");
+const emojiPanel = document.getElementById("emoji-panel");
+const emojiBtn = document.getElementById("emoji-btn");
+const pdfBtn = document.getElementById("pdf-btn");
+const gifBtn = document.getElementById("gif-btn");
+const gifPanel = document.getElementById("gif-panel");
+const gifSearch = document.getElementById("gif-search");
+const gifGrid = document.getElementById("gif-grid");
+const gifStatus = document.getElementById("gif-status");
+const voiceBtn = document.getElementById("voice-btn");
+const EMOJI = [
+  { glyph: "😂", names: ["lol", "joy", "laugh"] },
+  { glyph: "🤣", names: ["rofl", "rolling"] },
+  { glyph: "😀", names: ["grinning", "grin"] },
+  { glyph: "😁", names: ["beaming", "grin2"] },
+  { glyph: "😊", names: ["blush", "smile"] },
+  { glyph: "😇", names: ["innocent", "halo"] },
+  { glyph: "🙂", names: ["slight_smile"] },
+  { glyph: "😉", names: ["wink"] },
+  { glyph: "😍", names: ["heart_eyes", "love"] },
+  { glyph: "😘", names: ["kiss"] },
+  { glyph: "😜", names: ["stuck_out_tongue", "winky"] },
+  { glyph: "🤔", names: ["thinking", "think"] },
+  { glyph: "🙄", names: ["eyeroll", "rolling_eyes"] },
+  { glyph: "😏", names: ["smirk"] },
+  { glyph: "😢", names: ["cry", "sad"] },
+  { glyph: "😭", names: ["sob", "bawling"] },
+  { glyph: "😤", names: ["huff", "triumph"] },
+  { glyph: "😡", names: ["rage", "angry"] },
+  { glyph: "🤯", names: ["exploding_head", "mindblown"] },
+  { glyph: "😱", names: ["scream", "shocked"] },
+  { glyph: "😴", names: ["sleep", "zzz"] },
+  { glyph: "🤗", names: ["hug", "hugging"] },
+  { glyph: "🙌", names: ["raised_hands", "hooray"] },
+  { glyph: "👍", names: ["thumbsup", "yes", "+1"] },
+  { glyph: "👎", names: ["thumbsdown", "no", "-1"] },
+  { glyph: "👏", names: ["clap", "applause"] },
+  { glyph: "🙏", names: ["pray", "thanks", "please"] },
+  { glyph: "💪", names: ["muscle", "flex"] },
+  { glyph: "🔥", names: ["fire", "lit"] },
+  { glyph: "❤️", names: ["heart", "red_heart", "love_heart"] },
+  { glyph: "💯", names: ["100", "hundred"] },
+  { glyph: "✨", names: ["sparkles", "stars"] },
+  { glyph: "🎉", names: ["tada", "party", "celebrate"] },
+  { glyph: "✅", names: ["check", "done", "white_check_mark"] },
+  { glyph: "❌", names: ["x", "cross"] },
+  { glyph: "⭐", names: ["star"] },
+  { glyph: "👋", names: ["wave", "hello", "hi"] },
+  { glyph: "🤝", names: ["handshake", "deal"] },
+  { glyph: "👀", names: ["eyes", "look"] },
+  { glyph: "💬", names: ["speech", "comment"] },
+  { glyph: "📱", names: ["iphone", "phone"] },
+  { glyph: "💻", names: ["computer", "laptop"] },
+  { glyph: "🏠", names: ["house", "home"] },
+  { glyph: "☀️", names: ["sun", "sunny"] },
+  { glyph: "🌙", names: ["moon"] },
+  { glyph: "🌧️", names: ["rain", "cloud_rain"] },
+  { glyph: "☕", names: ["coffee"] },
+  { glyph: "🍕", names: ["pizza"] },
+  { glyph: "🍰", names: ["cake"] },
+  { glyph: "🎵", names: ["music"] },
+  { glyph: "📸", names: ["camera"] },
+  { glyph: "💡", names: ["bulb", "idea"] },
+  { glyph: "🔒", names: ["lock"] },
+  { glyph: "📍", names: ["pin", "location"] },
+  { glyph: "🚗", names: ["car"] },
+  { glyph: "✈️", names: ["airplane", "plane"] },
+];
 
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let conversations = [];
 let selectedId = null;
 let pendingImage = null;
 let pendingNewImage = null;
+let pendingGifUrl = null;
+let pendingNewGifUrl = null;
+let voiceRec = null;
 let selectedContact = null;
 let selectedExistingContact = null;
 let contactSaveMode = "new";
 let contactModalNumber = "";
 let socket = null;
 let recentNoticeKeys = [];
+let eventGen = 0;
+let reconnectTimer = null;
+let reconnectAttempt = 0;
+let reconnecting = false;
+let wantEvents = false;
+let phoneReachable = true;
+let overlayTimer = null;
+const OVERLAY_GRACE_MS = 20000;
+let pairingInFlight = false;
+let gifEnabled = true;
+let voiceEnabled = true;
+
+function setPairStatus(msg) {
+  if (pairStatus) pairStatus.textContent = msg || "";
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function pollPair(requestId) {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await fetch("/api/v1/pair/" + requestId, {
+        credentials: "include",
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "approved") return data.token;
+        if (data.status === "denied") return null;
+      }
+    } catch (_) {}
+    await sleep(1000);
+  }
+  return null;
+}
+
+async function startPair(e) {
+  if (e) e.preventDefault();
+  if (pairingInFlight) return;
+  const pinEl = document.getElementById("pin");
+  const pin = (pinEl && pinEl.value ? pinEl.value : "").trim();
+  if (!/^\d{8}$/.test(pin)) {
+    setPairStatus("Enter the 8-digit PIN from the LanText app.");
+    return;
+  }
+  pairingInFlight = true;
+  if (pairBtn) pairBtn.disabled = true;
+  setPairStatus("Waiting for approval on your phone…");
+  try {
+    const started = await fetch("/api/v1/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ pin, clientName: navigator.userAgent.slice(0, 60) }),
+      credentials: "include",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!started.ok) {
+      let err = "PIN rejected";
+      try { err = (await started.json()).error || err; } catch (_) {}
+      setPairStatus(
+        err === "expired"
+          ? "That PIN expired. Use the PIN currently shown in the app."
+          : err === "locked"
+            ? "Too many attempts. Wait a moment and try again."
+            : "PIN rejected. Check the PIN on the phone and try again.",
+      );
+      return;
+    }
+    const { requestId } = await started.json();
+    if (!requestId) {
+      setPairStatus("The phone did not start pairing. Try again with a fresh PIN.");
+      return;
+    }
+    const tokenFound = await pollPair(requestId);
+    if (!tokenFound) {
+      setPairStatus("Pairing was denied or expired. Approve on the phone, then try again.");
+      return;
+    }
+    token = tokenFound;
+    localStorage.setItem(TOKEN_KEY, token);
+    await enterApp();
+  } catch (err) {
+    const timedOut = err && (err.name === "TimeoutError" || err.name === "AbortError");
+    setPairStatus(timedOut
+      ? "The phone did not respond. Check Wi-Fi and try again."
+      : ((err && err.message) || "Could not reach the phone."));
+  } finally {
+    pairingInFlight = false;
+    if (pairBtn) pairBtn.disabled = false;
+  }
+}
+
+if (pairForm) pairForm.addEventListener("submit", startPair);
+
+function applyExperimental(src) {
+  if (!src) return;
+  if (typeof src.gifEnabled === "boolean") gifEnabled = src.gifEnabled;
+  if (typeof src.voiceEnabled === "boolean") voiceEnabled = src.voiceEnabled;
+  if (gifBtn) gifBtn.hidden = !gifEnabled;
+  const newGif = document.getElementById("new-gif-btn");
+  if (newGif) newGif.hidden = !gifEnabled;
+  if (voiceBtn) voiceBtn.hidden = !voiceEnabled;
+  const newVoice = document.getElementById("new-voice-btn");
+  if (newVoice) newVoice.hidden = !voiceEnabled;
+  if (!gifEnabled && gifPanel) gifPanel.hidden = true;
+  if (!gifEnabled) {
+    pendingGifUrl = null;
+    pendingNewGifUrl = null;
+  }
+  if (!voiceEnabled && voiceRec) voiceRec.stop();
+  if (!voiceEnabled) {
+    if (pendingImage && (pendingImage.type || "").startsWith("audio/")) {
+      pendingImage = null;
+      if (pendingPreview) { pendingPreview.hidden = true; pendingPreview.innerHTML = ""; }
+    }
+    if (pendingNewImage && (pendingNewImage.type || "").startsWith("audio/")) {
+      pendingNewImage = null;
+      if (newPendingPreview) { newPendingPreview.hidden = true; newPendingPreview.innerHTML = ""; }
+    }
+  }
+  const accept = [];
+  if (gifEnabled) {
+    accept.push("image/*", ".gif");
+  } else {
+    accept.push("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif");
+  }
+  if (voiceEnabled) accept.push("audio/*");
+  const acceptStr = accept.join(",");
+  if (fileInput) fileInput.accept = acceptStr;
+  if (newFileInput) newFileInput.accept = acceptStr;
+  const attach = document.getElementById("attach-btn");
+  if (attach) attach.title = gifEnabled ? "Attach a picture or GIF" : "Attach a picture";
+  if (composeText) {
+    composeText.placeholder = gifEnabled && voiceEnabled
+      ? "Message, GIF, or voice note"
+      : gifEnabled ? "Message or GIF"
+        : voiceEnabled ? "Message or voice note"
+          : "Message";
+  }
+  const hint = document.querySelector(".compose-hint");
+  if (hint) {
+    const extra = gifEnabled && voiceEnabled ? "GIF or 🎤 for MMS · "
+      : gifEnabled ? "GIF for MMS · "
+        : voiceEnabled ? "🎤 for MMS · "
+          : "";
+    hint.textContent = "Enter to send · :lol then Tab · " + extra + "Shift+Enter for a new line";
+  }
+}
+
+function isGifFile(file) {
+  return !!file && ((file.type || "") === "image/gif" || /\.gif$/i.test(file.name || ""));
+}
+function isAudioFile(file) {
+  return !!file && (file.type || "").startsWith("audio/");
+}
+function rejectDisabledMedia(file) {
+  if (isGifFile(file) && !gifEnabled) {
+    alert("GIF sending is turned off on the phone.");
+    return true;
+  }
+  if (isAudioFile(file) && !voiceEnabled) {
+    alert("Voice messages are turned off on the phone.");
+    return true;
+  }
+  return false;
+}
 
 function currentPalette() {
   return localStorage.getItem(THEME_PALETTE_KEY) || "fern";
@@ -75,6 +316,16 @@ function applyTheme() {
   root.dataset.mode = mode;
   root.dataset.resolved = resolvedMode(mode);
   syncThemeControls();
+  if (appearanceReady) syncAppearance();
+}
+let appearanceReady = false;
+function syncAppearance() {
+  fetch("/api/v1/appearance", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json; charset=UTF-8" }),
+    credentials: "include",
+    body: JSON.stringify({ palette: currentPalette(), mode: currentMode() }),
+  }).catch(() => {});
 }
 function syncThemeControls() {
   const palette = currentPalette();
@@ -119,9 +370,17 @@ document.getElementById("theme-mode").addEventListener("click", (e) => {
   localStorage.setItem(THEME_MODE_KEY, btn.dataset.mode);
   applyTheme();
 });
-document.getElementById("theme-btn").addEventListener("click", openTheme);
-document.getElementById("pair-theme-btn").addEventListener("click", openTheme);
-document.getElementById("close-theme").addEventListener("click", closeTheme);
+function on(id, ev, fn) {
+  const node = typeof id === "string" ? document.getElementById(id) : id;
+  if (!node) return;
+  node.addEventListener(ev, fn);
+}
+on("refresh-btn", "click", (e) => {
+  refreshInbox(e.shiftKey);
+});
+on("theme-btn", "click", openTheme);
+on("pair-theme-btn", "click", openTheme);
+on("close-theme", "click", closeTheme);
 themeModal.addEventListener("click", (e) => {
   if (e.target === themeModal) closeTheme();
 });
@@ -133,16 +392,30 @@ function authHeaders(extra = {}) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    headers: authHeaders(options.headers),
-    credentials: "include",
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      ...options,
+      headers: authHeaders(options.headers),
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch (_) {
+    noteUnreachable("Can't reach the phone.");
+    scheduleReconnect();
+    throw new Error("Can't reach the phone");
+  }
   if (res.status === 401) {
     token = "";
     localStorage.removeItem(TOKEN_KEY);
     showPair();
+    markLive();
     throw new Error("unpaired");
+  }
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    noteUnreachable("Can't reach the phone.");
+    scheduleReconnect();
+    throw new Error("Can't reach the phone");
   }
   if (!res.ok) {
     let msg = res.statusText;
@@ -154,9 +427,140 @@ async function api(path, options = {}) {
   return res;
 }
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+}
+
+function saveInboxSnapshot() {
+  try {
+    sessionStorage.setItem(INBOX_KEY, JSON.stringify({ selectedId, conversations }));
+  } catch (_) {}
+}
+
+function restoreInboxSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(INBOX_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.conversations)) conversations = data.conversations;
+    if (data.selectedId) selectedId = data.selectedId;
+  } catch (_) {}
+}
+
+function showDisconnectOverlay(detail) {
+  document.body.classList.add("disconnected");
+  disconnectOverlay.hidden = false;
+  connLabel.textContent = reconnecting ? "Reconnecting…" : "Offline";
+  if (detail) disconnectStatus.textContent = detail;
+  else if (!disconnectStatus.textContent) {
+    disconnectStatus.textContent = "The phone did not answer. It may be off the Wi-Fi, or this computer just woke.";
+  }
+}
+
+function noteUnreachable(detail, { showNow = false } = {}) {
+  if (phoneReachable) {
+    phoneReachable = false;
+    connLabel.textContent = "Reconnecting…";
+  }
+  if (showNow || disconnectOverlay.hidden === false) {
+    showDisconnectOverlay(detail);
+    return;
+  }
+  if (overlayTimer == null) {
+    overlayTimer = setTimeout(() => {
+      overlayTimer = null;
+      if (!phoneReachable) showDisconnectOverlay(detail);
+    }, OVERLAY_GRACE_MS);
+  }
+}
+
+function markLive() {
+  phoneReachable = true;
+  reconnectAttempt = 0;
+  reconnecting = false;
+  if (reconnectTimer != null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (overlayTimer != null) {
+    clearTimeout(overlayTimer);
+    overlayTimer = null;
+  }
+  document.body.classList.remove("disconnected");
+  disconnectOverlay.hidden = true;
+  disconnectStatus.textContent = "";
+  reconnectBtn.disabled = false;
+  if (wantEvents && socket && socket.readyState === WebSocket.OPEN) {
+    connLabel.textContent = "Live";
+  } else {
+    connLabel.textContent = "Connected";
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnecting || reconnectTimer != null) return;
+  const overlayUp = disconnectOverlay.hidden === false;
+  const delay = overlayUp
+    ? Math.min(20000, 1500 * Math.pow(1.4, reconnectAttempt++))
+    : 2000;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (disconnectOverlay.hidden === false) reconnectToPhone();
+    else if (wantEvents) connectEvents();
+    else reconnectToPhone();
+  }, delay);
+}
+
+async function enterApp() {
+  showApp();
+  const session = await api("/api/v1/session");
+  applyExperimental(session);
+  await loadInbox();
+  wantEvents = true;
+  connectEvents();
+  appearanceReady = true;
+  syncAppearance();
+  setupNotifications();
+  markLive();
+}
+
+async function reconnectToPhone() {
+  if (reconnecting) return;
+  reconnecting = true;
+  reconnectBtn.disabled = true;
+  connLabel.textContent = "Reconnecting…";
+  disconnectStatus.textContent = "Trying again…";
+  try {
+    const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
+    if (!res.ok) throw new Error("unreachable");
+    const meta = await res.json();
+    applyExperimental(meta);
+    if (token || meta.paired) {
+      await enterApp();
+      return;
+    }
+    showPair();
+    markLive();
+  } catch (_) {
+    reconnecting = false;
+    reconnectBtn.disabled = false;
+    noteUnreachable("Still can't reach the phone.", { showNow: true });
+    scheduleReconnect();
+  }
+}
+
 function showPair() {
+  wantEvents = false;
+  eventGen += 1;
+  if (socket) {
+    try { socket.close(); } catch (_) {}
+    socket = null;
+  }
   pairView.hidden = false;
   appView.hidden = true;
+  if (disconnectOverlay) disconnectOverlay.hidden = true;
+  document.body.classList.remove("disconnected");
   closeNewModal();
   closeHelp();
   closeTheme();
@@ -187,6 +591,8 @@ function openNewModal() {
 
 function closeNewModal() {
   newModal.hidden = true;
+  hideEmojiPanel();
+  if (gifPanel) gifPanel.hidden = true;
 }
 
 function openHelp() { helpModal.hidden = false; }
@@ -207,78 +613,75 @@ function moveConversation(delta) {
 }
 
 async function boot() {
+  registerServiceWorker();
+  restoreInboxSnapshot();
+  if (token) {
+    showApp();
+    renderConversations(searchInput.value);
+  } else {
+    showPair();
+  }
+  setupNotifications();
   try {
-    const meta = await fetch("/api/v1/meta", { credentials: "include" }).then((r) => r.json());
+    const res = await fetch("/api/v1/meta", {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error("unreachable");
+    const meta = await res.json();
+    applyExperimental(meta);
     if (meta.fingerprint) {
       fpLine.textContent = "Certificate fingerprint: " + meta.fingerprint.match(/.{1,4}/g).join(" ");
     }
     if (token || meta.paired) {
-      await api("/api/v1/session");
+      await enterApp();
+      return;
+    }
+    showPair();
+    markLive();
+    return;
+  } catch (_) {
+    if (token) {
       showApp();
-      await loadInbox();
-      connectEvents();
-      setupNotifications();
-      return;
+      renderConversations(searchInput.value);
+      noteUnreachable("Can't reach the phone.", { showNow: true });
+      scheduleReconnect();
+    } else {
+      showPair();
+      pairStatus.textContent = "Could not reach the phone. Check the PIN on the app and try again.";
     }
-  } catch (_) {}
-  showPair();
+  }
 }
 
-pairForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  pairStatus.textContent = "Waiting for approval on your phone…";
+async function refreshInbox(fullReload) {
+  if (fullReload) {
+    location.reload();
+    return;
+  }
+  if (disconnectOverlay && disconnectOverlay.hidden === false) {
+    await reconnectToPhone();
+    return;
+  }
   try {
-    const pin = document.getElementById("pin").value.trim();
-    const started = await fetch("/api/v1/pair", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin, clientName: navigator.userAgent.slice(0, 60) }),
-    });
-    if (!started.ok) {
-      pairStatus.textContent = "PIN rejected. Check the app and try again.";
-      return;
-    }
-    const { requestId } = await started.json();
-    const tokenFound = await pollPair(requestId);
-    if (!tokenFound) {
-      pairStatus.textContent = "Pairing was denied or expired.";
-      return;
-    }
-    token = tokenFound;
-    localStorage.setItem(TOKEN_KEY, token);
-    showApp();
+    connLabel.textContent = "Refreshing…";
     await loadInbox();
-    connectEvents();
-    setupNotifications();
-  } catch (err) {
-    pairStatus.textContent = err.message;
+    if (wantEvents) connectEvents();
+    markLive();
+  } catch (_) {
+    noteUnreachable("Can't reach the phone.");
+    scheduleReconnect();
   }
-});
-
-async function pollPair(requestId) {
-  for (let i = 0; i < 60; i++) {
-    const res = await fetch("/api/v1/pair/" + requestId, { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.status === "approved") return data.token;
-      if (data.status === "denied") return null;
-    } else if (res.status === 404) {
-      await sleep(1000);
-      continue;
-    }
-    await sleep(1000);
-  }
-  return null;
 }
-
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function loadInbox(opts = {}) {
   const previous = conversations;
   conversations = await api("/api/v1/conversations");
+  sortConversations();
   if (opts.notify) notifyFromInbox(previous, conversations);
   updateTitle();
   renderConversations(searchInput.value);
+  saveInboxSnapshot();
   if (selectedId) await openThread(selectedId, false);
 }
 
@@ -302,13 +705,14 @@ function notifyFromInbox(prev, next) {
   }
 }
 
-function setupNotifications() {
+async function setupNotifications() {
   if (!("Notification" in window)) return;
   if (Notification.permission === "default") {
-    notifyBanner.hidden = false;
-  } else {
-    notifyBanner.hidden = true;
+    try {
+      await Notification.requestPermission();
+    } catch (_) {}
   }
+  notifyBanner.hidden = Notification.permission !== "default";
 }
 
 notifyBanner.addEventListener("click", async () => {
@@ -339,28 +743,34 @@ function showDesktopNotice({ title, body, threadId }) {
   } catch (_) {}
 }
 
+let searchMatchIds = null;
 function renderConversations(filter) {
   const q = (filter || "").trim().toLowerCase();
   convoList.innerHTML = "";
-  const list = q
-    ? conversations.filter((c) => (c.displayName + " " + c.address + " " + c.snippet).toLowerCase().includes(q))
-    : conversations;
+  if (!q) sortConversations();
+  const list = !q
+    ? conversations
+    : conversations.filter((c) => {
+        if (searchMatchIds && searchMatchIds.has(c.id)) return true;
+        return (c.displayName + " " + c.address + " " + c.snippet).toLowerCase().includes(q);
+      });
   if (!list.length) {
     convoList.innerHTML = "<p class='muted' style='padding:16px'>No conversations</p>";
     return;
   }
   for (const c of list) {
     const el = document.createElement("div");
-    el.className = "convo" + (c.id === selectedId ? " active" : "") + (c.unread ? " unread" : "");
+    el.className = "convo" + (c.id === selectedId ? " active" : "") + (c.unread ? " unread" : "") + (c.pinned ? " pinned" : "");
     el.dataset.id = c.id;
     el.innerHTML = `
       ${avatarHtml(c.displayName, c.avatarColor, c.photoUrl)}
       <div>
-        <div class="name">${escapeHtml(c.displayName)}${c.unread ? '<span class="dot"></span>' : ""}</div>
+        <div class="name">${escapeHtml(c.displayName)}${c.pinned ? '<span class="pin-mark" title="Pinned">📌</span>' : ""}${c.unread ? '<span class="dot"></span>' : ""}</div>
         <div class="snippet">${escapeHtml(c.snippet || "")}</div>
       </div>
       <div class="when">${formatTime(c.timestamp)}</div>`;
     el.addEventListener("click", () => openThread(c.id, true));
+    el.addEventListener("contextmenu", (e) => showConvoMenu(e, c.id));
     convoList.appendChild(el);
   }
 }
@@ -369,19 +779,27 @@ searchInput.addEventListener("input", () => {
   const q = searchInput.value.trim();
   if (q.length >= 2) {
     api("/api/v1/search?q=" + encodeURIComponent(q)).then((hits) => {
-      const seen = new Set();
+      searchMatchIds = new Set();
       const list = [];
+      const seen = new Set();
       for (const hit of hits) {
-        if (!seen.has(hit.conversation.id)) {
-          seen.add(hit.conversation.id);
-          list.push(hit.conversation);
+        const convo = hit.conversation;
+        if (hit.message && hit.message.body) convo.snippet = hit.message.body;
+        searchMatchIds.add(convo.id);
+        if (!seen.has(convo.id)) {
+          seen.add(convo.id);
+          list.push(convo);
         }
       }
       conversations = mergeById(conversations, list);
       renderConversations(q);
-    }).catch(() => renderConversations(q));
+    }).catch(() => {
+      searchMatchIds = null;
+      renderConversations(q);
+    });
   } else {
-    renderConversations(q);
+    searchMatchIds = null;
+    renderConversations("");
   }
 });
 
@@ -394,8 +812,20 @@ async function openThread(id, mark) {
   threadPanel.hidden = false;
   document.getElementById("thread-name").textContent = convo.displayName;
   document.getElementById("thread-number").textContent = convo.address;
-  document.getElementById("thread-avatar").outerHTML = avatarHtml(convo.displayName, convo.avatarColor, convo.photoUrl).replace("class=\"avatar\"", "class=\"avatar\" id=\"thread-avatar\"");
+  const avWrap = document.createElement("div");
+  avWrap.innerHTML = avatarHtml(convo.displayName, convo.avatarColor, convo.photoUrl);
+  const av = avWrap.firstElementChild;
+  av.id = "thread-avatar";
+  av.title = "Contact details";
+  av.setAttribute("role", "button");
+  av.tabIndex = 0;
+  av.addEventListener("click", showPeople);
+  av.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showPeople(); }
+  });
+  document.getElementById("thread-avatar").replaceWith(av);
   saveContactBtn.hidden = !canSaveContact(convo);
+  syncPinButton();
   renderConversations(searchInput.value);
   const msgs = await api(`/api/v1/conversations/${id}/messages?limit=50`);
   renderMessages(msgs.slice().reverse());
@@ -420,7 +850,9 @@ function renderMessages(msgs) {
     let html = "";
     for (const att of m.attachments || []) {
       if ((att.mimeType || "").startsWith("image/")) {
-        html += `<img alt="" src="${att.url}" />`;
+        html += `<img alt="" src="${escapeHtml(att.url)}" />`;
+      } else if ((att.mimeType || "").startsWith("audio/")) {
+        html += `<audio controls preload="none" src="${escapeHtml(att.url)}"></audio>`;
       }
     }
     html += linkify(m.body || "");
@@ -431,9 +863,31 @@ function renderMessages(msgs) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+const lightbox = document.getElementById("lightbox");
+const lightboxImg = document.getElementById("lightbox-img");
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.hidden = false;
+}
+function closeLightbox() {
+  lightbox.hidden = true;
+  lightboxImg.removeAttribute("src");
+}
+messagesEl.addEventListener("click", (e) => {
+  const img = e.target.closest("img");
+  if (!img) return;
+  e.preventDefault();
+  openLightbox(img.currentSrc || img.src);
+});
+lightbox.addEventListener("click", closeLightbox);
+
 composeText.addEventListener("input", () => {
   composeText.style.height = "auto";
   composeText.style.height = Math.min(composeText.scrollHeight, 160) + "px";
+  updateEmojiSuggest(composeText);
+});
+document.getElementById("new-body").addEventListener("input", () => {
+  updateEmojiSuggest(document.getElementById("new-body"));
 });
 
 function imageFromClipboard(e) {
@@ -495,6 +949,518 @@ newModal.addEventListener("drop", (e) => {
 });
 
 document.getElementById("attach-btn").addEventListener("click", () => fileInput.click());
+gifBtn.addEventListener("click", () => {
+  if (!gifEnabled) return;
+  hideEmojiPanel();
+  gifPanel.hidden = !gifPanel.hidden;
+  if (!gifPanel.hidden) {
+    gifSearch.focus();
+    if (!gifGrid.childElementCount) searchGifs("reaction");
+  }
+});
+document.getElementById("new-gif-btn").addEventListener("click", () => {
+  if (!gifEnabled) return;
+  hideEmojiPanel();
+  const form = document.getElementById("new-form");
+  form.insertBefore(gifPanel, form.querySelector(".new-actions"));
+  gifPanel.hidden = false;
+  gifSearch.focus();
+  if (!gifGrid.childElementCount) searchGifs("reaction");
+});
+let gifTimer = null;
+gifSearch.addEventListener("input", () => {
+  clearTimeout(gifTimer);
+  gifTimer = setTimeout(() => searchGifs(gifSearch.value.trim() || "reaction"), 300);
+});
+async function searchGifs(q) {
+  gifStatus.hidden = false;
+  gifStatus.textContent = "Searching…";
+  gifGrid.innerHTML = "";
+  try {
+    const hits = await api("/api/v1/gifs?q=" + encodeURIComponent(q || "reaction"));
+    if (!hits.length) {
+      gifStatus.textContent = "No GIFs small enough for MMS. Try another word, or attach a .gif file.";
+      return;
+    }
+    gifStatus.hidden = true;
+    for (const hit of hits) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.title = hit.title || "";
+      btn.innerHTML = `<img alt="" src="${escapeHtml(hit.url)}" />`;
+      btn.addEventListener("click", () => pickGif(hit));
+      gifGrid.appendChild(btn);
+    }
+    bindGifHover();
+  } catch (err) {
+    gifStatus.textContent = err.message || "Could not search GIFs";
+  }
+}
+function bindGifHover() {
+  const hover = document.getElementById("gif-hover");
+  const hoverImg = document.getElementById("gif-hover-img");
+  if (!hover || !gifGrid || gifGrid.dataset.hoverBound) return;
+  gifGrid.dataset.hoverBound = "1";
+  gifGrid.addEventListener("mouseover", (e) => {
+    const img = e.target.closest("img");
+    if (!img) return;
+    hoverImg.src = img.currentSrc || img.src;
+    hover.hidden = false;
+    const rect = img.getBoundingClientRect();
+    hover.style.left = (rect.right + 12) + "px";
+    hover.style.top = rect.top + "px";
+    requestAnimationFrame(() => {
+      const box = hover.getBoundingClientRect();
+      let left = rect.right + 12;
+      let top = rect.top;
+      if (box.right > window.innerWidth - 8) left = rect.left - box.width - 12;
+      if (box.bottom > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.height - 8);
+      hover.style.left = Math.max(8, left) + "px";
+      hover.style.top = Math.max(8, top) + "px";
+    });
+  });
+  gifGrid.addEventListener("mouseleave", () => {
+    hover.hidden = true;
+    hoverImg.removeAttribute("src");
+  });
+}
+function pickGif(hit) {
+  if (!gifEnabled) return;
+  const fileish = { name: (hit.title || "gif") + ".gif", type: "image/gif" };
+  if (!newModal.hidden) {
+    pendingNewGifUrl = hit.url;
+    pendingNewImage = null;
+    renderPreview(newPendingPreview, fileish, () => {
+      pendingNewGifUrl = null;
+      newPendingPreview.hidden = true;
+      newPendingPreview.innerHTML = "";
+    }, hit.url);
+  } else {
+    pendingGifUrl = hit.url;
+    pendingImage = null;
+    renderPreview(pendingPreview, fileish, () => {
+      pendingGifUrl = null;
+      pendingPreview.hidden = true;
+      pendingPreview.innerHTML = "";
+    }, hit.url);
+  }
+  gifPanel.hidden = true;
+}
+voiceBtn.addEventListener("click", () => toggleVoice(false));
+document.getElementById("new-voice-btn").addEventListener("click", () => toggleVoice(true));
+async function toggleVoice(forNew) {
+  if (!voiceEnabled) return;
+  if (voiceRec) {
+    await voiceRec.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert("This browser cannot record audio.");
+    return;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  voiceBtn.classList.add("recording");
+  voiceBtn.title = "Stop recording";
+  const chunks = [];
+  const ctx = new AudioContext();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const rate = ctx.sampleRate;
+  proc.onaudioprocess = (ev) => {
+    chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+  };
+  const mute = ctx.createGain();
+  mute.gain.value = 0;
+  src.connect(proc);
+  proc.connect(mute);
+  mute.connect(ctx.destination);
+  const started = Date.now();
+  const limit = setTimeout(() => voiceRec && voiceRec.stop(), 45000);
+  voiceRec = {
+    stop: async () => {
+      clearTimeout(limit);
+      voiceRec = null;
+      proc.disconnect();
+      src.disconnect();
+      stream.getTracks().forEach((t) => t.stop());
+      await ctx.close();
+      voiceBtn.classList.remove("recording");
+      voiceBtn.title = "Record a voice message";
+      const samples = mergeFloat32(chunks);
+      if (samples.length < rate / 5) return;
+      const wav = encodeWav(downsample(samples, rate, 8000), 8000);
+      const file = new File([wav], "voice.wav", { type: "audio/wav" });
+      if (forNew) setPendingNewImage(file);
+      else setPendingImage(file);
+    },
+  };
+}
+function mergeFloat32(chunks) {
+  let n = 0;
+  for (const c of chunks) n += c.length;
+  const out = new Float32Array(n);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+function downsample(input, fromRate, toRate) {
+  if (fromRate === toRate) {
+    const out = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return out;
+  }
+  const outLen = Math.max(1, Math.floor(input.length * toRate / fromRate));
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * fromRate / toRate;
+    const i0 = Math.min(input.length - 1, Math.floor(src));
+    const s = Math.max(-1, Math.min(1, input[i0]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+function encodeWav(samples, sampleRate) {
+  const n = samples.length * 2;
+  const buf = new ArrayBuffer(44 + n);
+  const v = new DataView(buf);
+  const w = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  w(0, "RIFF");
+  v.setUint32(4, 36 + n, true);
+  w(8, "WAVE");
+  w(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  w(36, "data");
+  v.setUint32(40, n, true);
+  for (let i = 0; i < samples.length; i++) v.setInt16(44 + i * 2, samples[i], true);
+  return buf;
+}
+let emojiMode = "";
+let emojiSel = 0;
+let emojiHits = [];
+let emojiToken = null;
+
+function emojiCommand(item) {
+  return ":" + item.names[0] + ":";
+}
+function insertEmoji(textarea, glyph, from, to) {
+  const start = from ?? textarea.selectionStart ?? textarea.value.length;
+  const end = to ?? textarea.selectionEnd ?? start;
+  textarea.value = textarea.value.slice(0, start) + glyph + textarea.value.slice(end);
+  const pos = start + glyph.length;
+  textarea.selectionStart = textarea.selectionEnd = pos;
+  textarea.focus();
+  hideEmojiPanel();
+  textarea.dispatchEvent(new Event("input"));
+}
+function hideEmojiPanel() {
+  if (!emojiPanel) return;
+  emojiPanel.hidden = true;
+  emojiMode = "";
+  emojiToken = null;
+}
+function colonToken(textarea) {
+  const pos = textarea.selectionStart;
+  if (pos !== textarea.selectionEnd) return null;
+  const before = textarea.value.slice(0, pos);
+  const m = before.match(/(^|[\s\n]):([a-zA-Z+][a-zA-Z0-9_+]*)(:)?$/);
+  if (!m) return null;
+  const query = m[2];
+  const closed = !!m[3];
+  const start = pos - 1 - query.length - (closed ? 1 : 0);
+  return { start, end: pos, query: query.toLowerCase(), closed };
+}
+function matchEmoji(query) {
+  const q = query.toLowerCase();
+  const exact = [];
+  const prefix = [];
+  const inner = [];
+  for (const item of EMOJI) {
+    if (item.names.some((n) => n === q)) exact.push(item);
+    else if (item.names.some((n) => n.startsWith(q))) prefix.push(item);
+    else if (item.names.some((n) => n.includes(q))) inner.push(item);
+  }
+  return exact.concat(prefix, inner).slice(0, 12);
+}
+function renderEmojiPanel(items, mode) {
+  emojiPanel.innerHTML = "";
+  emojiPanel.classList.toggle("suggest", mode === "suggest");
+  emojiMode = mode;
+  emojiHits = items;
+  items.forEach((item, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const cmd = emojiCommand(item);
+    btn.dataset.cmd = item.names.map((n) => ":" + n + ":").join("  ");
+    btn.title = btn.dataset.cmd;
+    if (mode === "suggest") {
+      btn.innerHTML = `<span class="emoji-glyph">${item.glyph}</span><span class="emoji-cmd">${escapeHtml(cmd)}</span>`;
+      btn.classList.toggle("active", i === emojiSel);
+    } else {
+      btn.textContent = item.glyph;
+    }
+    btn.addEventListener("click", () => {
+      const target = emojiToken?.textarea || (!newModal.hidden ? document.getElementById("new-body") : composeText);
+      if (emojiToken && emojiToken.textarea === target) {
+        insertEmoji(target, item.glyph, emojiToken.start, emojiToken.end);
+      } else {
+        insertEmoji(target, item.glyph);
+      }
+    });
+    emojiPanel.appendChild(btn);
+  });
+}
+function setEmojiSel(index) {
+  if (!emojiHits.length) return;
+  emojiSel = (index + emojiHits.length) % emojiHits.length;
+  [...emojiPanel.children].forEach((btn, i) => btn.classList.toggle("active", i === emojiSel));
+  emojiPanel.children[emojiSel]?.scrollIntoView({ block: "nearest" });
+}
+function commitEmojiSuggest(textarea) {
+  const item = emojiHits[emojiSel];
+  if (!item || !emojiToken) return;
+  insertEmoji(textarea, item.glyph, emojiToken.start, emojiToken.end);
+}
+function updateEmojiSuggest(textarea) {
+  const token = colonToken(textarea);
+  if (!token) {
+    if (emojiMode === "suggest") hideEmojiPanel();
+    return;
+  }
+  const hits = matchEmoji(token.query);
+  if (!hits.length) {
+    if (emojiMode === "suggest") hideEmojiPanel();
+    return;
+  }
+  if (token.closed) {
+    const exact = hits.find((item) => item.names.includes(token.query));
+    if (exact) {
+      insertEmoji(textarea, exact.glyph, token.start, token.end);
+      return;
+    }
+  }
+  emojiToken = { ...token, textarea };
+  emojiSel = 0;
+  const host = textarea.closest(".compose-main") || textarea.closest("form");
+  if (host) host.insertBefore(emojiPanel, textarea.nextSibling);
+  renderEmojiPanel(hits, "suggest");
+  emojiPanel.hidden = false;
+}
+function handleEmojiKeys(e, textarea) {
+  if (emojiPanel.hidden || emojiMode !== "suggest") return false;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    setEmojiSel(emojiSel + 1);
+    return true;
+  }
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    setEmojiSel(emojiSel - 1);
+    return true;
+  }
+  if (e.key === "Tab" || e.key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    commitEmojiSuggest(textarea);
+    return true;
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    hideEmojiPanel();
+    return true;
+  }
+  return false;
+}
+function fillEmojiPanel() {
+  emojiToken = null;
+  renderEmojiPanel(EMOJI, "browse");
+}
+emojiBtn.addEventListener("click", () => {
+  if (!emojiPanel.hidden && emojiMode === "browse") {
+    hideEmojiPanel();
+    return;
+  }
+  fillEmojiPanel();
+  composeText.closest(".compose-main").appendChild(emojiPanel);
+  emojiPanel.hidden = false;
+});
+document.getElementById("new-emoji-btn").addEventListener("click", () => {
+  fillEmojiPanel();
+  const form = document.getElementById("new-form");
+  form.insertBefore(emojiPanel, form.querySelector(".new-actions"));
+  emojiPanel.hidden = false;
+  document.getElementById("new-body").focus();
+});
+pdfBtn.addEventListener("click", downloadThreadPdf);
+document.getElementById("copy-number-btn").addEventListener("click", async () => {
+  const convo = conversations.find((c) => c.id === selectedId);
+  const text = ((convo?.recipients || []).filter(Boolean).join("\n") || convo?.address || "").trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  const btn = document.getElementById("copy-number-btn");
+  btn.textContent = "Copied";
+  setTimeout(() => { btn.textContent = "Copy Number"; }, 1200);
+});
+function sortConversations() {
+  conversations.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.timestamp || 0) - (a.timestamp || 0));
+}
+function syncPinButton() {
+  const btn = document.getElementById("pin-btn");
+  if (!btn) return;
+  const convo = conversations.find((c) => c.id === selectedId);
+  const pinned = !!(convo && convo.pinned);
+  btn.textContent = pinned ? "Unpin" : "Pin";
+  btn.title = pinned ? "Unpin this conversation" : "Pin this conversation";
+}
+async function setPinned(id, pinned) {
+  const convo = conversations.find((c) => c.id === id);
+  if (!convo) return;
+  const previous = !!convo.pinned;
+  convo.pinned = pinned;
+  sortConversations();
+  syncPinButton();
+  renderConversations(searchInput.value);
+  hideConvoMenu();
+  try {
+    await api("/api/v1/conversations/" + encodeURIComponent(id) + "/pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ pinned }),
+    });
+  } catch (err) {
+    convo.pinned = previous;
+    sortConversations();
+    syncPinButton();
+    renderConversations(searchInput.value);
+    alert(err.message || "Could not pin this conversation.");
+  }
+}
+const convoMenu = document.getElementById("convo-menu");
+let menuThreadId = null;
+function hideConvoMenu() {
+  if (convoMenu) convoMenu.hidden = true;
+  menuThreadId = null;
+}
+function showConvoMenu(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!convoMenu) return;
+  menuThreadId = id;
+  const convo = conversations.find((c) => c.id === id);
+  const pinBtn = document.getElementById("convo-menu-pin");
+  if (pinBtn) pinBtn.textContent = convo && convo.pinned ? "Unpin conversation" : "Pin conversation";
+  convoMenu.hidden = false;
+  const x = Math.min(e.clientX, window.innerWidth - 208);
+  const y = Math.min(e.clientY, window.innerHeight - 56);
+  convoMenu.style.left = x + "px";
+  convoMenu.style.top = y + "px";
+}
+if (document.getElementById("convo-menu-pin")) {
+  document.getElementById("convo-menu-pin").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const id = menuThreadId;
+    const convo = conversations.find((c) => c.id === id);
+    if (id) setPinned(id, !(convo && convo.pinned));
+  });
+}
+document.addEventListener("click", hideConvoMenu);
+document.addEventListener("scroll", hideConvoMenu, true);
+on("pin-btn", "click", () => {
+  const convo = conversations.find((c) => c.id === selectedId);
+  if (!convo) return;
+  setPinned(convo.id, !convo.pinned);
+});
+const peopleModal = document.getElementById("people-modal");
+const peopleList = document.getElementById("people-list");
+document.getElementById("people-btn").addEventListener("click", showPeople);
+document.getElementById("close-people").addEventListener("click", () => { peopleModal.hidden = true; });
+peopleModal.addEventListener("click", (e) => { if (e.target === peopleModal) peopleModal.hidden = true; });
+async function showPeople() {
+  if (!selectedId) return;
+  peopleList.innerHTML = "<p class='muted'>Loading…</p>";
+  peopleModal.hidden = false;
+  try {
+    const people = await api("/api/v1/conversations/" + encodeURIComponent(selectedId) + "/people");
+    peopleList.innerHTML = "";
+    if (!people.length) {
+      peopleList.innerHTML = "<p class='muted'>No numbers on this thread.</p>";
+      return;
+    }
+    for (const p of people) {
+      const el = document.createElement("div");
+      el.className = "people-card";
+      let rows = "";
+      for (const phone of p.phones || []) {
+        rows += `<div class="people-row"><span class="muted">${escapeHtml(phone.label)}</span><span>${escapeHtml(phone.value)}</span><button type="button" class="text-btn" data-copy="${escapeHtml(phone.value)}">Copy</button></div>`;
+      }
+      for (const email of p.emails || []) {
+        rows += `<div class="people-row"><span class="muted">${escapeHtml(email.label)}</span><span>${escapeHtml(email.value)}</span><button type="button" class="text-btn" data-copy="${escapeHtml(email.value)}">Copy</button></div>`;
+      }
+      if (p.org) rows += `<div class="people-row"><span class="muted">Org</span><span>${escapeHtml(p.org)}${p.title ? " · " + escapeHtml(p.title) : ""}</span></div>`;
+      if (p.postal) rows += `<div class="people-row"><span class="muted">Address</span><span>${escapeHtml(p.postal)}</span></div>`;
+      el.innerHTML = `${avatarHtml(p.name, p.avatarColor, p.photoUrl)}<div class="people-meta"><h3>${escapeHtml(p.name)}</h3>${rows || "<p class='muted'>No extra details</p>"}</div>`;
+      el.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const value = btn.getAttribute("data-copy") || "";
+          try { await navigator.clipboard.writeText(value); } catch (_) {}
+          btn.textContent = "Copied";
+          setTimeout(() => { btn.textContent = "Copy"; }, 1200);
+        });
+      });
+      peopleList.appendChild(el);
+    }
+  } catch (err) {
+    peopleList.innerHTML = "<p class='muted'>" + escapeHtml(err.message || "Could not load details") + "</p>";
+  }
+}
+async function downloadThreadPdf() {
+  if (!selectedId) return;
+  try {
+    const res = await fetch("/api/v1/conversations/" + encodeURIComponent(selectedId) + "/pdf", {
+      headers: authHeaders(),
+      credentials: "include",
+    });
+    if (res.status === 401) {
+      token = "";
+      localStorage.removeItem(TOKEN_KEY);
+      showPair();
+      throw new Error("unpaired");
+    }
+    if (!res.ok) throw new Error("export failed");
+    const blob = await res.blob();
+    const header = res.headers.get("content-disposition") || "";
+    const match = /filename=\"([^\"]+)\"/.exec(header);
+    const fallback = "LanText-" + (document.getElementById("thread-name").textContent || "thread").replace(/[^\w.-]+/g, "-") + ".pdf";
+    const a = document.createElement("a");
+    const href = URL.createObjectURL(blob);
+    a.href = href;
+    a.download = match ? match[1] : fallback;
+    a.click();
+    URL.revokeObjectURL(href);
+  } catch (err) {
+    alert(err.message || "Could not download this thread.");
+  }
+}
 fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) setPendingImage(fileInput.files[0]);
 });
@@ -503,14 +1469,21 @@ newFileInput.addEventListener("change", () => {
   if (newFileInput.files[0]) setPendingNewImage(newFileInput.files[0]);
 });
 
-function renderPreview(container, file, onClear) {
+function renderPreview(container, file, onClear, previewUrl) {
   container.hidden = false;
-  container.innerHTML = `<img alt="attachment" /><span class="muted">${escapeHtml(file.name || "image")}</span><button type="button">Remove</button>`;
-  container.querySelector("img").src = URL.createObjectURL(file);
+  const audio = (file.type || "").startsWith("audio/");
+  if (audio) {
+    container.innerHTML = `<audio controls></audio><span class="muted">Voice message</span><button type="button">Remove</button>`;
+    container.querySelector("audio").src = previewUrl || URL.createObjectURL(file);
+  } else {
+    container.innerHTML = `<img alt="attachment" /><span class="muted">${escapeHtml(file.name || "image")}</span><button type="button">Remove</button>`;
+    container.querySelector("img").src = previewUrl || URL.createObjectURL(file);
+  }
   container.querySelector("button").onclick = onClear;
 }
 
 function setPendingImage(file) {
+  if (rejectDisabledMedia(file)) return;
   pendingImage = file;
   renderPreview(pendingPreview, file, () => {
     pendingImage = null;
@@ -521,6 +1494,7 @@ function setPendingImage(file) {
 }
 
 function setPendingNewImage(file) {
+  if (rejectDisabledMedia(file)) return;
   pendingNewImage = file;
   renderPreview(newPendingPreview, file, () => {
     pendingNewImage = null;
@@ -546,6 +1520,7 @@ function wantsSend(e) {
 }
 
 composeText.addEventListener("keydown", (e) => {
+  if (handleEmojiKeys(e, composeText)) return;
   if (wantsSend(e)) {
     e.preventDefault();
     composeForm.requestSubmit();
@@ -553,6 +1528,7 @@ composeText.addEventListener("keydown", (e) => {
 });
 
 newBody.addEventListener("keydown", (e) => {
+  if (handleEmojiKeys(e, newBody)) return;
   if (wantsSend(e)) {
     e.preventDefault();
     newForm.requestSubmit();
@@ -564,26 +1540,31 @@ composeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selectedId || sending) return;
   const body = composeText.value.trim();
-  if (!body && !pendingImage) return;
+  if (pendingGifUrl && !gifEnabled) { alert("GIF sending is turned off on the phone."); return; }
+  if (pendingImage && isAudioFile(pendingImage) && !voiceEnabled) { alert("Voice messages are turned off on the phone."); return; }
+  if (!body && !pendingImage && !pendingGifUrl) return;
   const convo = conversations.find((c) => c.id === selectedId);
   sending = true;
   const sendBtn = document.getElementById("send-btn");
   const previousLabel = sendBtn.textContent;
-  sendBtn.textContent = pendingImage ? "Sending picture…" : "Sending…";
+  sendBtn.textContent = pendingGifUrl ? "Sending GIF…" : pendingImage ? ((pendingImage.type || "").startsWith("audio/") ? "Sending voice…" : "Sending picture…") : "Sending…";
   try {
     const dest = (convo?.recipients || []).filter(Boolean);
     const recipients = dest.length ? dest : [convo?.address].filter(Boolean);
     const payload = { body, recipients };
-    if (pendingImage) {
+    if (pendingGifUrl) {
+      payload.mediaUrl = pendingGifUrl;
+    } else if (pendingImage) {
       payload.imageBase64 = await fileToBase64(pendingImage);
       payload.imageMime = pendingImage.type || "image/jpeg";
     }
     await api(`/api/v1/conversations/${selectedId}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(payload),
     });
     pendingImage = null;
+    pendingGifUrl = null;
     pendingPreview.hidden = true;
     pendingPreview.innerHTML = "";
     composeText.value = "";
@@ -610,8 +1591,12 @@ helpModal.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === "Escape") {
+    if (!lightbox.hidden) { closeLightbox(); e.preventDefault(); return; }
+    if (emojiPanel && !emojiPanel.hidden) { hideEmojiPanel(); e.preventDefault(); return; }
+    if (gifPanel && !gifPanel.hidden) { gifPanel.hidden = true; e.preventDefault(); return; }
     if (!helpModal.hidden) { closeHelp(); e.preventDefault(); return; }
     if (!themeModal.hidden) { closeTheme(); e.preventDefault(); return; }
+    if (peopleModal && !peopleModal.hidden) { peopleModal.hidden = true; e.preventDefault(); return; }
     if (!contactModal.hidden) { closeContactModal(); e.preventDefault(); return; }
     if (!newModal.hidden) { closeNewModal(); e.preventDefault(); return; }
     if (document.activeElement === composeText) { composeText.blur(); return; }
@@ -681,19 +1666,24 @@ newForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = document.getElementById("new-body").value.trim();
   const number = selectedContact?.number || contactSearch.value.trim();
-  if (!number || (!body && !pendingNewImage)) return;
+  if (pendingNewGifUrl && !gifEnabled) { alert("GIF sending is turned off on the phone."); return; }
+  if (pendingNewImage && isAudioFile(pendingNewImage) && !voiceEnabled) { alert("Voice messages are turned off on the phone."); return; }
+  if (!number || (!body && !pendingNewImage && !pendingNewGifUrl)) return;
   try {
     const payload = { recipients: [number], body };
-    if (pendingNewImage) {
+    if (pendingNewGifUrl) {
+      payload.mediaUrl = pendingNewGifUrl;
+    } else if (pendingNewImage) {
       payload.imageBase64 = await fileToBase64(pendingNewImage);
       payload.imageMime = pendingNewImage.type || "image/jpeg";
     }
     await api("/api/v1/conversations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(payload),
     });
     pendingNewImage = null;
+    pendingNewGifUrl = null;
     closeNewModal();
     document.getElementById("new-body").value = "";
     await loadInbox();
@@ -703,18 +1693,30 @@ newForm.addEventListener("submit", async (e) => {
 });
 
 function connectEvents() {
+  const gen = ++eventGen;
   if (socket) try { socket.close(); } catch (_) {}
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const q = token ? ("?token=" + encodeURIComponent(token)) : "";
   socket = new WebSocket(proto + "//" + location.host + "/api/v1/events" + q);
-  socket.onopen = () => { connLabel.textContent = "Live"; };
+  socket.onopen = () => {
+    if (gen !== eventGen) return;
+    const recovered = !phoneReachable;
+    connLabel.textContent = "Live";
+    if (recovered) markLive();
+    if (recovered) loadInbox().catch(() => {});
+  };
   socket.onclose = () => {
-    connLabel.textContent = "Reconnecting…";
-    setTimeout(connectEvents, 3000);
+    if (gen !== eventGen) return;
+    noteUnreachable("The live link to the phone closed.");
+    scheduleReconnect();
   };
   socket.onmessage = (ev) => {
     let payload = {};
     try { payload = JSON.parse(ev.data); } catch (_) {}
+    if (payload.type === "settings") {
+      applyExperimental(payload);
+      return;
+    }
     if (payload.type === "incoming") {
       const thread = conversations.find((c) =>
         c.address === payload.address || (c.recipients || []).includes(payload.address),
@@ -839,7 +1841,7 @@ document.getElementById("save-contact-form").addEventListener("submit", async (e
       }
       await api("/api/v1/contacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify({ name, number }),
       });
     } else {
@@ -849,7 +1851,7 @@ document.getElementById("save-contact-form").addEventListener("submit", async (e
       }
       await api("/api/v1/contacts/" + encodeURIComponent(selectedExistingContact.id) + "/phones", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify({ number }),
       });
     }
@@ -894,5 +1896,28 @@ function mergeById(base, extra) {
   for (const c of extra) map.set(c.id, c);
   return [...map.values()];
 }
+
+reconnectBtn.addEventListener("click", () => {
+  if (reconnectTimer != null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectToPhone();
+});
+window.addEventListener("online", () => {
+  if (disconnectOverlay.hidden === false) reconnectToPhone();
+  else if (wantEvents) connectEvents();
+});
+window.addEventListener("offline", () => {
+  noteUnreachable("This computer is offline.");
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && disconnectOverlay.hidden === false) {
+    reconnectToPhone();
+  }
+});
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted && disconnectOverlay.hidden === false) reconnectToPhone();
+});
 
 boot();

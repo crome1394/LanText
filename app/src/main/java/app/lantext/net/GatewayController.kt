@@ -2,6 +2,8 @@ package app.lantext.net
 
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import app.lantext.data.AppSettings
 import app.lantext.data.GateReason
@@ -34,6 +36,13 @@ class GatewayController(
     @Volatile var server: GatewayServer? = null
         private set
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var stopDebounceArmed = false
+    private val stopIfStillIneligible = Runnable {
+        stopDebounceArmed = true
+        onNetworkChanged()
+    }
+
     init {
         scope.launch {
             combine(settingsRepo.settings, pairing.pairingPin, clientCount) { settings, pin, clients ->
@@ -54,13 +63,37 @@ class GatewayController(
     @Synchronized
     fun refresh(settings: AppSettings = _lastSettings, pin: String? = pairing.pairingPin.value, clients: Int = clientCount.value) {
         _lastSettings = settings
+        val previous = _snapshot.value
         val reason = WifiGate.evaluate(context, settings)
         val ssid = WifiGate.currentSsid(context)
         val ip = WifiGate.wifiIpv4(context)
-        val listening = reason == GateReason.LISTENING && ip != null
+        val boundIp = previous.bindAddress
+        // Same bound IPv4 with a momentarily hidden SSID is still the LAN we
+        // already opened. A different IPv4 must prove its SSID before listen.
+        val keepOnSameIp = server != null &&
+            ip != null &&
+            ip == boundIp &&
+            settings.enabled &&
+            reason == GateReason.SSID_HIDDEN
+        val eligible = reason == GateReason.LISTENING && ip != null
+        val listening = eligible || keepOnSameIp
+        val transientDrop = settings.enabled &&
+            server != null &&
+            (reason == GateReason.NO_WIFI || reason == GateReason.SSID_HIDDEN)
         if (listening) {
-            ensureService()
+            stopDebounceArmed = false
+            mainHandler.removeCallbacks(stopIfStillIneligible)
+            val bindChanged = server == null ||
+                !previous.listening ||
+                previous.bindAddress != ip ||
+                previous.port != settings.listenPort
+            if (bindChanged) ensureService()
+        } else if (transientDrop && !stopDebounceArmed) {
+            mainHandler.removeCallbacks(stopIfStillIneligible)
+            mainHandler.postDelayed(stopIfStillIneligible, STOP_DEBOUNCE_MS)
         } else {
+            stopDebounceArmed = false
+            mainHandler.removeCallbacks(stopIfStillIneligible)
             stopServer()
             if (settings.enabled) {
                 ensureService()
@@ -69,7 +102,7 @@ class GatewayController(
             }
         }
         val url = if (listening) "https://$ip:${settings.listenPort}" else null
-        _snapshot.value = GatewaySnapshot(
+        val snap = GatewaySnapshot(
             enabled = settings.enabled,
             listening = listening && server != null,
             ssid = ssid,
@@ -80,8 +113,19 @@ class GatewayController(
             pairingPin = if (listening) pin else null,
             reason = reason,
             clientCount = clients,
+            webPalette = settings.webPalette,
+            webMode = settings.webMode,
         )
-        ToggleWidget.updateAll(context, _snapshot.value)
+        if (snap != previous) {
+            _snapshot.value = snap
+            ToggleWidget.updateAll(context, snap)
+        }
+        if (listening) {
+            val persistSsid = ssid ?: WifiGate.lastSsid
+            if (persistSsid != null && ip != null) {
+                scope.launch { settingsRepo.rememberLastNetwork(persistSsid, ip) }
+            }
+        }
     }
 
     @Synchronized
@@ -89,15 +133,15 @@ class GatewayController(
         val settings = _lastSettings
         val reason = WifiGate.evaluate(context, settings)
         val ip = WifiGate.wifiIpv4(context) ?: return false
+        val alreadyBound = server != null &&
+            _snapshot.value.bindAddress == ip &&
+            _snapshot.value.port == settings.listenPort
+        if (alreadyBound && (reason == GateReason.LISTENING || reason == GateReason.SSID_HIDDEN)) {
+            return true
+        }
         if (reason != GateReason.LISTENING) {
             stopServer()
             return false
-        }
-        if (server != null &&
-            _snapshot.value.bindAddress == ip &&
-            _snapshot.value.port == settings.listenPort
-        ) {
-            return true
         }
         stopServer()
         certs.keyStore(ip)
@@ -148,4 +192,8 @@ class GatewayController(
     }
 
     private var _lastSettings: AppSettings = AppSettings()
+
+    companion object {
+        private const val STOP_DEBOUNCE_MS = 5_000L
+    }
 }

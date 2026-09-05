@@ -137,12 +137,14 @@ class SmsRepository(
         if (q.length < 2) return@withContext emptyList()
         contacts.refresh()
         val convos = conversations()
+        val byId = convos.associateBy { it.id }
         val hits = mutableListOf<SearchHit>()
         for (c in convos) {
             if (c.displayName.contains(q, true) || c.address.contains(q, true) || c.snippet.contains(q, true)) {
                 hits += SearchHit(c, null)
             }
         }
+        val like = "%$q%"
         context.contentResolver.query(
             Telephony.Sms.CONTENT_URI,
             arrayOf(
@@ -153,8 +155,8 @@ class SmsRepository(
                 Telephony.Sms.DATE,
                 Telephony.Sms.TYPE,
             ),
-            "${Telephony.Sms.BODY} LIKE ?",
-            arrayOf("%$q%"),
+            "${Telephony.Sms.BODY} LIKE ? COLLATE NOCASE",
+            arrayOf(like),
             "${Telephony.Sms.DATE} DESC",
         )?.use { cursor ->
             var n = 0
@@ -164,19 +166,20 @@ class SmsRepository(
             val iBody = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val iDate = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
             val iType = cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE)
-            while (cursor.moveToNext() && n < 40) {
+            while (cursor.moveToNext() && n < 200) {
                 val thread = cursor.getLong(iThread).toString()
-                val convo = convos.firstOrNull { it.id == thread } ?: continue
+                val convo = byId[thread] ?: continue
                 val address = cursor.getString(iAddress).orEmpty()
                 val type = cursor.getInt(iType)
+                val body = cursor.getString(iBody).orEmpty()
                 hits += SearchHit(
-                    convo,
+                    convo.copy(snippet = body),
                     MessageDto(
                         id = "sms-${cursor.getLong(iId)}",
                         threadId = thread,
                         address = address,
                         displayName = contacts.displayName(address),
-                        body = cursor.getString(iBody).orEmpty(),
+                        body = body,
                         timestamp = cursor.getLong(iDate),
                         incoming = type == Telephony.Sms.MESSAGE_TYPE_INBOX,
                         type = "sms",
@@ -186,7 +189,87 @@ class SmsRepository(
                 n++
             }
         }
-        hits.distinctBy { it.message?.id ?: "c-${it.conversation.id}" }.take(50)
+        searchMmsText(q, byId, hits)
+        hits.distinctBy { it.message?.id ?: "c-${it.conversation.id}" }.take(80)
+    }
+
+    fun participants(threadId: String, fallbackAddress: String): List<String> {
+        val id = threadId.toLongOrNull() ?: return fallbackAddress.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        val fromThread = canonicalAddresses(id)
+        if (fromThread.isNotEmpty()) return fromThread
+        return fallbackAddress.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    }
+
+    private fun searchMmsText(q: String, byId: Map<String, ConversationDto>, hits: MutableList<SearchHit>) {
+        val like = "%$q%"
+        context.contentResolver.query(
+            Uri.parse("content://mms/part"),
+            arrayOf("_id", Telephony.Mms.Part.MSG_ID, Telephony.Mms.Part.TEXT, Telephony.Mms.Part.CONTENT_TYPE),
+            "${Telephony.Mms.Part.TEXT} LIKE ? COLLATE NOCASE",
+            arrayOf(like),
+            null,
+        )?.use { cursor ->
+            var n = 0
+            while (cursor.moveToNext() && n < 80) {
+                val mime = cursor.getString(3).orEmpty()
+                if (mime.startsWith("image/") || mime == "application/smil") continue
+                val text = cursor.getString(2).orEmpty()
+                if (text.isBlank()) continue
+                val msgId = cursor.getLong(1)
+                val thread = mmsThreadId(msgId) ?: continue
+                val convo = byId[thread.toString()] ?: continue
+                hits += SearchHit(
+                    convo.copy(snippet = text),
+                    MessageDto(
+                        id = "mms-$msgId",
+                        threadId = thread.toString(),
+                        address = convo.address,
+                        displayName = convo.displayName,
+                        body = text,
+                        timestamp = convo.timestamp,
+                        incoming = true,
+                        type = "mms",
+                        status = "received",
+                    ),
+                )
+                n++
+            }
+        }
+    }
+
+    private fun mmsThreadId(mmsId: Long): Long? {
+        return context.contentResolver.query(
+            Telephony.Mms.CONTENT_URI,
+            arrayOf(Telephony.Mms.THREAD_ID),
+            "${Telephony.Mms._ID}=?",
+            arrayOf(mmsId.toString()),
+            null,
+        )?.use { if (it.moveToFirst()) it.getLong(0) else null }
+    }
+
+    private fun canonicalAddresses(threadId: Long): List<String> {
+        val ids = context.contentResolver.query(
+            Uri.parse("content://mms-sms/conversations").buildUpon()
+                .appendQueryParameter("simple", "true").build(),
+            arrayOf("_id", "recipient_ids"),
+            "_id=?",
+            arrayOf(threadId.toString()),
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) null
+            else cursor.getString(1)
+        } ?: return emptyList()
+        return ids.split(" ").mapNotNull { raw ->
+            val id = raw.trim()
+            if (id.isEmpty()) return@mapNotNull null
+            context.contentResolver.query(
+                Uri.parse("content://mms-sms/canonical-addresses"),
+                arrayOf("address"),
+                "_id=?",
+                arrayOf(id),
+                null,
+            )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.map { it.trim() }.filter { it.isNotBlank() }
     }
 
     suspend fun sendSms(recipients: List<String>, body: String, subscriptionId: Int?): MessageDto {
@@ -230,17 +313,21 @@ class SmsRepository(
         val dest = recipients.map { PhoneNumbers.normalize(it, region).ifBlank { it.trim() } }
             .filter { it.isNotBlank() }
         require(dest.isNotEmpty()) { "No recipients" }
-        require(imageBytes != null && imageBytes.isNotEmpty()) { "MMS requires an image in this version" }
+        require(imageBytes != null && imageBytes.isNotEmpty()) { "MMS requires an attachment" }
         val mime = imageMime ?: "image/jpeg"
-        val resized = MmsSender.resizeIfNeeded(imageBytes, mime)
         val subId = subscriptionId ?: android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
-        MmsSender.send(context, smsManager(subscriptionId), dest, body, resized.bytes, resized.mime, subId)
+        MmsSender.send(context, smsManager(subscriptionId), dest, body, imageBytes, mime, subId)
+        val label = when {
+            mime.contains("gif", true) -> "GIF"
+            mime.startsWith("audio/") -> "Voice message"
+            else -> "Picture"
+        }
         MessageDto(
             id = "local-mms-${System.currentTimeMillis()}",
             threadId = "",
             address = dest.joinToString(", "),
             displayName = contacts.displayName(dest.first()),
-            body = body.ifBlank { "Picture" },
+            body = body.ifBlank { label },
             timestamp = System.currentTimeMillis(),
             incoming = false,
             type = "mms",
@@ -402,7 +489,11 @@ class SmsRepository(
                 val box = cursor.getInt(iBox)
                 val parts = mmsParts(mmsId)
                 val text = parts.firstOrNull { it.mimeType.startsWith("text/") }?.text.orEmpty()
-                val attachments = parts.filter { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") }
+                val attachments = parts.filter {
+                    it.mimeType.startsWith("image/") ||
+                        it.mimeType.startsWith("video/") ||
+                        it.mimeType.startsWith("audio/")
+                }
                     .map {
                         AttachmentDto(
                             id = it.id,

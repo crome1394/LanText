@@ -9,6 +9,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import app.lantext.MainActivity
 import app.lantext.R
+import app.lantext.data.GateReason
 import app.lantext.data.GatewaySnapshot
 import app.lantext.data.PendingPairing
 import app.lantext.net.GatewayService
@@ -54,11 +55,19 @@ object Notifications {
         val text = if (snap.listening) {
             snap.url ?: context.getString(R.string.notification_listening)
         } else {
-            context.getString(R.string.notification_waiting)
+            when (snap.reason) {
+                GateReason.NO_WIFI -> context.getString(R.string.notification_no_wifi)
+                GateReason.SSID_HIDDEN -> context.getString(R.string.notification_ssid_hidden)
+                GateReason.WRONG_NETWORK -> context.getString(R.string.notification_wrong_network)
+                else -> context.getString(R.string.notification_waiting)
+            }
         }
         return NotificationCompat.Builder(context, CHANNEL_GATEWAY)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(context.getString(R.string.notification_listening))
+            .setContentTitle(
+                if (snap.listening) context.getString(R.string.notification_listening)
+                else context.getString(R.string.notification_waiting),
+            )
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)

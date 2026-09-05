@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.lantext.util.ListenPort
+import app.lantext.widget.WidgetTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -23,6 +25,13 @@ class SettingsRepository(context: Context) {
             allowedSsids = prefs[KEY_ALLOWED] ?: emptySet(),
             knownSsids = prefs[KEY_KNOWN] ?: emptySet(),
             listenPort = prefs[KEY_PORT] ?: AppSettings.DEFAULT_PORT,
+            webPalette = prefs[KEY_PALETTE] ?: "fern",
+            webMode = prefs[KEY_MODE] ?: "auto",
+            lastNetworkSsid = prefs[KEY_LAST_SSID],
+            lastNetworkIpv4 = prefs[KEY_LAST_IPV4],
+            gifEnabled = prefs[KEY_GIF] ?: true,
+            voiceEnabled = prefs[KEY_VOICE] ?: true,
+            pinnedThreadIds = prefs[KEY_PINNED] ?: emptySet(),
         )
     }
 
@@ -55,6 +64,10 @@ class SettingsRepository(context: Context) {
         store.edit { prefs ->
             prefs[KEY_ALLOWED] = (prefs[KEY_ALLOWED] ?: emptySet()) - ssid
             prefs[KEY_KNOWN] = (prefs[KEY_KNOWN] ?: emptySet()) - ssid
+            if (prefs[KEY_LAST_SSID] == ssid) {
+                prefs.remove(KEY_LAST_SSID)
+                prefs.remove(KEY_LAST_IPV4)
+            }
         }
     }
 
@@ -65,11 +78,50 @@ class SettingsRepository(context: Context) {
         store.edit { it[KEY_PORT] = port }
     }
 
+    suspend fun setGifEnabled(enabled: Boolean) {
+        store.edit { it[KEY_GIF] = enabled }
+    }
+
+    suspend fun setVoiceEnabled(enabled: Boolean) {
+        store.edit { it[KEY_VOICE] = enabled }
+    }
+
+    suspend fun setThreadPinned(threadId: String, pinned: Boolean) {
+        val id = threadId.trim()
+        if (id.isEmpty()) return
+        store.edit { prefs ->
+            val cur = prefs[KEY_PINNED] ?: emptySet()
+            prefs[KEY_PINNED] = if (pinned) cur + id else cur - id
+        }
+    }
+
+    suspend fun setAppearance(palette: String, mode: String) {
+        val p = WidgetTheme.normalizePalette(palette)
+        val m = WidgetTheme.normalizeMode(mode)
+        store.edit {
+            it[KEY_PALETTE] = p
+            it[KEY_MODE] = m
+        }
+    }
+
     suspend fun rememberSsid(ssid: String) {
         val clean = ssid.trim().trim('"')
         if (clean.isEmpty() || clean == UNKNOWN_SSID) return
+        if (clean in current().knownSsids) return
         store.edit { prefs ->
             prefs[KEY_KNOWN] = (prefs[KEY_KNOWN] ?: emptySet()) + clean
+        }
+    }
+
+    suspend fun rememberLastNetwork(ssid: String, ipv4: String) {
+        val clean = ssid.trim().trim('"')
+        val host = ipv4.trim()
+        if (clean.isEmpty() || clean == UNKNOWN_SSID || host.isEmpty()) return
+        val cur = current()
+        if (cur.lastNetworkSsid == clean && cur.lastNetworkIpv4 == host) return
+        store.edit {
+            it[KEY_LAST_SSID] = clean
+            it[KEY_LAST_IPV4] = host
         }
     }
 
@@ -80,5 +132,12 @@ class SettingsRepository(context: Context) {
         private val KEY_ALLOWED = stringSetPreferencesKey("allowed_ssids")
         private val KEY_KNOWN = stringSetPreferencesKey("known_ssids")
         private val KEY_PORT = intPreferencesKey("listen_port")
+        private val KEY_PALETTE = stringPreferencesKey("web_palette")
+        private val KEY_MODE = stringPreferencesKey("web_mode")
+        private val KEY_LAST_SSID = stringPreferencesKey("last_network_ssid")
+        private val KEY_LAST_IPV4 = stringPreferencesKey("last_network_ipv4")
+        private val KEY_GIF = booleanPreferencesKey("gif_enabled")
+        private val KEY_VOICE = booleanPreferencesKey("voice_enabled")
+        private val KEY_PINNED = stringSetPreferencesKey("pinned_threads")
     }
 }

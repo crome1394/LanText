@@ -75,6 +75,15 @@
       background: #38bdf8; display: inline-block; margin-left: 8px;
     }
     main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .thread-head { flex-wrap: wrap; }
+    .text-btn {
+      border: 1px solid #243848;
+      background: #1a2c3a;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 18px;
+      white-space: nowrap;
+    }
     .save {
       margin-left: auto;
       border: 1px solid #243848;
@@ -84,6 +93,7 @@
       font-size: 20px;
       white-space: nowrap;
     }
+    .pin { color: #38bdf8; margin-left: 6px; }
     .messages {
       flex: 1;
       padding: 20px 24px;
@@ -127,7 +137,7 @@
     }
     .meta { font-size: 16px; opacity: 0.7; margin-top: 6px; }
     .composer {
-      display: flex; gap: 10px; align-items: flex-end;
+      display: flex; gap: 8px; align-items: flex-end;
       padding: 16px 18px 28px;
       border-top: 1px solid #243848; background: #132230;
     }
@@ -156,6 +166,7 @@
           <p class="muted">Live</p>
         </div>
         <div class="head-actions">
+          <div class="icon">↻</div>
           <div class="icon">Aa</div>
           <div class="icon">+</div>
         </div>
@@ -165,7 +176,7 @@
         <div class="convo">
           <div class="avatar photo"></div>
           <div>
-            <div class="name">Maya Chen</div>
+            <div class="name">Maya Chen <span class="pin">📌</span></div>
             <div class="snippet">Trailhead parking is open at 7</div>
           </div>
           <div class="when">2:01 PM</div>
@@ -243,6 +254,10 @@
           <h2>+1 555 0177</h2>
           <p class="muted">5550177</p>
         </div>
+        <div class="text-btn">Copy Number</div>
+        <div class="text-btn">Details</div>
+        <div class="text-btn">Pin</div>
+        <div class="text-btn">Download Thread</div>
         <div class="save">Save contact</div>
       </div>
       <div class="messages">
@@ -285,9 +300,12 @@
       </div>
       <div class="composer">
         <div class="attach">📎</div>
+        <div class="attach" style="font-size:16px;font-weight:700">GIF</div>
+        <div class="attach">🎤</div>
+        <div class="attach">😊</div>
         <div class="compose-main">
-          <div class="box">Message or paste a picture</div>
-          <p class="hint">Enter to send · paste or drop a picture to attach · Shift+Enter for a new line</p>
+          <div class="box">Message, GIF, or voice note</div>
+          <p class="hint">Enter to send · :lol then Tab · GIF or 🎤 for MMS · Shift+Enter for a new line</p>
         </div>
         <div class="send">Send</div>
       </div>
