@@ -162,6 +162,14 @@
       </div>
     </div>
   </div>
+  <div id="disconnect-overlay" hidden>
+    <div class="disconnect-card" role="alertdialog" aria-labelledby="disconnect-title" aria-describedby="disconnect-copy">
+      <h2 id="disconnect-title">Can't reach the phone</h2>
+      <p id="disconnect-copy" class="lede">LanText is waiting for your phone on the LAN. That happens after this computer sleeps, the phone leaves Wi-Fi, or the listener is off.</p>
+      <p id="disconnect-status" class="status"></p>
+      <button type="button" id="reconnect-btn">Reconnect</button>
+    </div>
+  </div>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -5,6 +5,9 @@
     <string name="notification_channel_pairing">Pairing requests</string>
     <string name="notification_listening">LanText is available on this Wi-Fi</string>
     <string name="notification_waiting">Waiting for an allowed Wi-Fi network</string>
+    <string name="notification_no_wifi">Waiting for Wi-Fi</string>
+    <string name="notification_ssid_hidden">Wi-Fi is on, but Android is hiding the network name</string>
+    <string name="notification_wrong_network">Connected, but this Wi-Fi is not on the allowlist</string>
     <string name="notification_stop">Stop</string>
     <string name="notification_pairing_title">Computer wants to pair</string>
     <string name="notification_pairing_body">%1$s is requesting access to your messages. Approve only if this is you.</string>

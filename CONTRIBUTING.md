@@ -46,7 +46,10 @@ There is no substitute for a phone on Wi-Fi and a browser on the same LAN:
    the web UI without a reload (WebSocket).
 3. Paste a picture into the composer and confirm the carrier actually sends
    it (not only a failed outgoing item in Fossify / Google Messages).
-4. Leave the allowed Wi-Fi; the server should stop.
+4. Leave the allowed Wi-Fi; the server should stop. Toggle airplane mode on
+   and off; after Wi-Fi returns, the listener should start again without
+   opening the app. If the browser tab cannot reach the phone, the inbox
+   greys out with a Reconnect button instead of HTTP 502.
 5. Toggle the widget.
 6. Unknown number: Save contact (new, and add-to-existing).
 7. Appearance: Auto / Light / Dark and at least one other palette.

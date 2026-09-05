@@ -628,7 +628,7 @@ private const val CONTACTS_WHY =
 private const val NOTIFICATIONS_WHY =
     "On Android 13 and newer: pairing prompts, and the silent ongoing notice Android requires while the LAN server is a foreground service. Older Android does not prompt for this."
 private const val NEARBY_DEVICES_WHY =
-    "On Android 13 and newer only. Required to use the Wi-Fi APIs. Not a scan for headphones, speakers, or other phones."
+    "On Android 13 and newer only. Required so Android will tell LanText the Wi-Fi name while the listener runs in the background. Not a scan for headphones, speakers, or other phones."
 private const val LOCATION_WHY =
     "Required on every version LanText supports, including Android 13+. Android hides the current Wi-Fi name without it. Used only to compare that name to your allowlist. Coordinates are never read, stored, or sent."
 private const val NETWORK_WHY =
@@ -640,6 +640,7 @@ private val LAN_OPERATOR_NOTES = listOf(
     "Use the IP URL from the home screen (for example https://192.168.1.42:8743). Names like lantext.local are not advertised on the network, so they will not resolve unless you add them in DNS or /etc/hosts. Even then, the certificate only lists the Wi-Fi IP, so a hostname in the browser will fail the name check.",
     "A DHCP reservation or static IP keeps the URL and QR stable when the phone reconnects.",
     "If you already run Caddy, HAProxy, or OPNsense on the LAN, reverse-proxy to the phone’s IP and port and serve lantext.local with an internal CA. Keep that proxy on private addresses only. Pairing (PIN plus Approve) still applies. Do not port-forward this to the internet.",
+    "If the computer sleeps or the phone is off the allowed Wi-Fi, Caddy returns HTTP 502 because the phone did not answer. After the first successful visit, the browser keeps a copy of the page and greys out with a Reconnect button instead of Chrome’s 502 screen.",
 )
 
 @Composable

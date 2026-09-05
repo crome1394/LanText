@@ -14,4 +14,16 @@ class WifiGateTest {
         assertNull(WifiGate.normalizeSsid("  "))
         assertNull(WifiGate.normalizeSsid(null))
     }
+
+    @Test
+    fun rememberKeepsLastNameWhenSsidIsRedacted() {
+        WifiGate.remember("crome-IoT")
+        assertEquals("crome-IoT", WifiGate.lastSsid)
+        WifiGate.remember("<unknown ssid>")
+        assertEquals("crome-IoT", WifiGate.lastSsid)
+        WifiGate.remember("0x")
+        assertEquals("crome-IoT", WifiGate.lastSsid)
+        WifiGate.remember(null)
+        assertNull(WifiGate.lastSsid)
+    }
 }

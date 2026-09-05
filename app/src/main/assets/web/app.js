@@ -1,6 +1,7 @@
 const TOKEN_KEY = "lantext_token";
 const THEME_PALETTE_KEY = "lantext_palette";
 const THEME_MODE_KEY = "lantext_mode";
+const INBOX_KEY = "lantext_inbox_cache";
 
 const PALETTES = [
   { id: "fern", name: "Fern", swatch: ["#156b57", "#1f8a70", "#f3f6f4"] },
@@ -44,6 +45,9 @@ const notifyBanner = document.getElementById("notify-banner");
 const threadEl = document.getElementById("thread");
 const newFileInput = document.getElementById("new-file-input");
 const newPendingPreview = document.getElementById("new-pending-preview");
+const disconnectOverlay = document.getElementById("disconnect-overlay");
+const disconnectStatus = document.getElementById("disconnect-status");
+const reconnectBtn = document.getElementById("reconnect-btn");
 
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let conversations = [];
@@ -56,6 +60,12 @@ let contactSaveMode = "new";
 let contactModalNumber = "";
 let socket = null;
 let recentNoticeKeys = [];
+let eventGen = 0;
+let reconnectTimer = null;
+let reconnectAttempt = 0;
+let reconnecting = false;
+let wantEvents = false;
+let phoneReachable = true;
 
 function currentPalette() {
   return localStorage.getItem(THEME_PALETTE_KEY) || "fern";
@@ -133,16 +143,30 @@ function authHeaders(extra = {}) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    headers: authHeaders(options.headers),
-    credentials: "include",
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      ...options,
+      headers: authHeaders(options.headers),
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch (_) {
+    markDisconnected("Can't reach the phone.");
+    scheduleReconnect();
+    throw new Error("Can't reach the phone");
+  }
   if (res.status === 401) {
     token = "";
     localStorage.removeItem(TOKEN_KEY);
     showPair();
+    markLive();
     throw new Error("unpaired");
+  }
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    markDisconnected("Can't reach the phone.");
+    scheduleReconnect();
+    throw new Error("Can't reach the phone");
   }
   if (!res.ok) {
     let msg = res.statusText;
@@ -152,6 +176,114 @@ async function api(path, options = {}) {
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return res.json();
   return res;
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+}
+
+function saveInboxSnapshot() {
+  try {
+    sessionStorage.setItem(INBOX_KEY, JSON.stringify({ selectedId, conversations }));
+  } catch (_) {}
+}
+
+function restoreInboxSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(INBOX_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.conversations)) conversations = data.conversations;
+    if (data.selectedId) selectedId = data.selectedId;
+  } catch (_) {}
+}
+
+function markDisconnected(detail) {
+  phoneReachable = false;
+  document.body.classList.add("disconnected");
+  disconnectOverlay.hidden = false;
+  connLabel.textContent = reconnecting ? "Reconnecting…" : "Offline";
+  if (detail) disconnectStatus.textContent = detail;
+  else if (!disconnectStatus.textContent) {
+    disconnectStatus.textContent = "The phone did not answer. It may be off the Wi-Fi, or this computer just woke.";
+  }
+}
+
+function markLive() {
+  phoneReachable = true;
+  reconnectAttempt = 0;
+  reconnecting = false;
+  if (reconnectTimer != null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  document.body.classList.remove("disconnected");
+  disconnectOverlay.hidden = true;
+  disconnectStatus.textContent = "";
+  reconnectBtn.disabled = false;
+  if (wantEvents && socket && socket.readyState === WebSocket.OPEN) {
+    connLabel.textContent = "Live";
+  } else if (pairView.hidden === false) {
+    connLabel.textContent = "Connected";
+  } else {
+    connLabel.textContent = "Connected";
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnecting || reconnectTimer != null) return;
+  const delay = Math.min(20000, 1500 * Math.pow(1.4, reconnectAttempt));
+  reconnectAttempt += 1;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    reconnectToPhone();
+  }, delay);
+}
+
+async function pingPhone() {
+  try {
+    const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
+    if (!res.ok) return false;
+    const meta = await res.json();
+    return !!meta;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function enterApp() {
+  await api("/api/v1/session");
+  showApp();
+  await loadInbox();
+  wantEvents = true;
+  connectEvents();
+  setupNotifications();
+  markLive();
+}
+
+async function reconnectToPhone() {
+  if (reconnecting) return;
+  reconnecting = true;
+  reconnectBtn.disabled = true;
+  connLabel.textContent = "Reconnecting…";
+  disconnectStatus.textContent = "Trying again…";
+  try {
+    const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
+    if (!res.ok) throw new Error("unreachable");
+    const meta = await res.json();
+    if (token || meta.paired) {
+      await enterApp();
+      return;
+    }
+    showPair();
+    markLive();
+  } catch (_) {
+    reconnecting = false;
+    reconnectBtn.disabled = false;
+    markDisconnected("Still can't reach the phone.");
+    scheduleReconnect();
+  }
 }
 
 function showPair() {
@@ -207,21 +339,32 @@ function moveConversation(delta) {
 }
 
 async function boot() {
+  registerServiceWorker();
+  restoreInboxSnapshot();
   try {
-    const meta = await fetch("/api/v1/meta", { credentials: "include" }).then((r) => r.json());
+    const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
+    if (!res.ok) throw new Error("unreachable");
+    const meta = await res.json();
     if (meta.fingerprint) {
       fpLine.textContent = "Certificate fingerprint: " + meta.fingerprint.match(/.{1,4}/g).join(" ");
     }
     if (token || meta.paired) {
-      await api("/api/v1/session");
-      showApp();
-      await loadInbox();
-      connectEvents();
-      setupNotifications();
+      await enterApp();
       return;
     }
-  } catch (_) {}
-  showPair();
+    showPair();
+    markLive();
+    return;
+  } catch (_) {
+    if (token) {
+      showApp();
+      renderConversations(searchInput.value);
+    } else {
+      showPair();
+    }
+    markDisconnected("Can't reach the phone.");
+    scheduleReconnect();
+  }
 }
 
 pairForm.addEventListener("submit", async (e) => {
@@ -246,10 +389,7 @@ pairForm.addEventListener("submit", async (e) => {
     }
     token = tokenFound;
     localStorage.setItem(TOKEN_KEY, token);
-    showApp();
-    await loadInbox();
-    connectEvents();
-    setupNotifications();
+    await enterApp();
   } catch (err) {
     pairStatus.textContent = err.message;
   }
@@ -279,6 +419,7 @@ async function loadInbox(opts = {}) {
   if (opts.notify) notifyFromInbox(previous, conversations);
   updateTitle();
   renderConversations(searchInput.value);
+  saveInboxSnapshot();
   if (selectedId) await openThread(selectedId, false);
 }
 
@@ -703,14 +844,24 @@ newForm.addEventListener("submit", async (e) => {
 });
 
 function connectEvents() {
+  const gen = ++eventGen;
   if (socket) try { socket.close(); } catch (_) {}
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const q = token ? ("?token=" + encodeURIComponent(token)) : "";
   socket = new WebSocket(proto + "//" + location.host + "/api/v1/events" + q);
-  socket.onopen = () => { connLabel.textContent = "Live"; };
+  socket.onopen = () => {
+    if (gen !== eventGen) return;
+    connLabel.textContent = "Live";
+    if (!phoneReachable) markLive();
+  };
   socket.onclose = () => {
-    connLabel.textContent = "Reconnecting…";
-    setTimeout(connectEvents, 3000);
+    if (gen !== eventGen) return;
+    markDisconnected("The live link to the phone closed.");
+    scheduleReconnect();
+  };
+  socket.onerror = () => {
+    if (gen !== eventGen) return;
+    markDisconnected("The live link to the phone closed.");
   };
   socket.onmessage = (ev) => {
     let payload = {};
@@ -894,5 +1045,21 @@ function mergeById(base, extra) {
   for (const c of extra) map.set(c.id, c);
   return [...map.values()];
 }
+
+reconnectBtn.addEventListener("click", () => {
+  if (reconnectTimer != null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectToPhone();
+});
+window.addEventListener("online", () => reconnectToPhone());
+window.addEventListener("offline", () => markDisconnected("This computer is offline."));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !phoneReachable) reconnectToPhone();
+});
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) reconnectToPhone();
+});
 
 boot();

@@ -56,6 +56,7 @@ trusted.
 - Paste, drop, or attach a picture — it goes out as MMS through the carrier
 - Links in messages are clickable
 - Desktop notifications when a text arrives
+- If the computer wakes or the phone is off the LAN, the inbox greys out with a Reconnect button instead of a browser error
 - Save an unknown number as a contact, or add it to someone you already know
 - Appearance: Auto, Light, or Dark, plus palettes
 - Change the listen port (default 8743) if something else on your LAN uses it

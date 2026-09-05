@@ -24,7 +24,12 @@ object WifiGate {
     @Volatile private var lastLink: LinkProperties? = null
 
     fun remember(ssid: String?) {
-        lastSsid = normalizeSsid(ssid)
+        if (ssid == null) {
+            lastSsid = null
+            return
+        }
+        // A redacted "<unknown ssid>" must not wipe a name we already learned.
+        normalizeSsid(ssid)?.let { lastSsid = it }
     }
 
     fun rememberLink(network: Network, link: LinkProperties) {
@@ -42,22 +47,29 @@ object WifiGate {
     fun isOnWifi(context: Context): Boolean = wifiStaNetwork(context) != null
 
     fun currentSsid(context: Context): String? {
-        if (!isOnWifi(context)) {
-            lastSsid = null
-            return null
+        readVisibleSsid(context)?.let {
+            lastSsid = it
+            return it
         }
-        lastSsid?.let { return it }
+        // Keep the last good name while we are still on Wi-Fi (or still have a
+        // station IPv4). Android often redacts the SSID for a moment after
+        // airplane mode, a MAC change, or while the app is in the background.
+        if (isOnWifi(context) || wifiIpv4(context) != null) return lastSsid
+        return null
+    }
+
+    fun readVisibleSsid(context: Context): String? {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        wifiStaNetwork(context)?.let { net ->
+            val caps = cm?.getNetworkCapabilities(net)
+            normalizeSsid(wifiInfo(caps, context)?.ssid)?.let { return it }
+        }
         @Suppress("DEPRECATION")
-        val fromManager = normalizeSsid(
+        normalizeSsid(
             context.getSystemService(WifiManager::class.java)?.connectionInfo?.ssid,
-        )
-        if (fromManager != null) {
-            lastSsid = fromManager
-            return fromManager
-        }
-        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
-        val network = cm.activeNetwork ?: return null
-        val caps = cm.getNetworkCapabilities(network) ?: return null
+        )?.let { return it }
+        val active = cm?.activeNetwork ?: return null
+        val caps = cm.getNetworkCapabilities(active) ?: return null
         return normalizeSsid(wifiInfo(caps, context)?.ssid)
     }
 
@@ -140,8 +152,8 @@ object WifiGate {
         return value
     }
 
-    private fun wifiInfo(caps: NetworkCapabilities, context: Context): WifiInfo? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    private fun wifiInfo(caps: NetworkCapabilities?, context: Context): WifiInfo? {
+        if (caps != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val info = caps.transportInfo as? WifiInfo
             if (info != null) return info
         }

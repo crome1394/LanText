@@ -160,7 +160,11 @@ class GatewayServer(
                 val rel = uri.trimStart('/')
                 if (".." in rel) return json(Response.Status.BAD_REQUEST, mapOf("error" to "bad path"))
                 val ext = rel.substringAfterLast('.', "")
-                return asset("web/$rel", mime(ext))
+                val res = asset("web/$rel", mime(ext))
+                if (rel == "sw.js") {
+                    res.addHeader("Service-Worker-Allowed", "/")
+                }
+                return res
             }
             return json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
         }
@@ -276,7 +280,7 @@ class GatewayServer(
             }
             val bytes = stream.use { it.readBytes() }
             val res = newFixedLengthResponse(Response.Status.OK, mime, bytes.inputStream(), bytes.size.toLong())
-            secure(res)
+            secure(res, cacheable = true)
             return res
         }
 
@@ -302,17 +306,17 @@ class GatewayServer(
 
         private fun notFound(): Response = json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
 
-        private fun secure(res: Response) {
+        private fun secure(res: Response, cacheable: Boolean = false) {
             res.addHeader("X-Content-Type-Options", "nosniff")
             res.addHeader("X-Frame-Options", "DENY")
             res.addHeader("Referrer-Policy", "no-referrer")
             res.addHeader(
                 "Content-Security-Policy",
                 "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; " +
-                    "style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' wss: https:; " +
-                    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                    "style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; " +
+                    "connect-src 'self' wss: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )
-            res.addHeader("Cache-Control", "no-store")
+            res.addHeader("Cache-Control", if (cacheable) "no-cache" else "no-store")
         }
 
         private fun readBody(session: IHTTPSession): String {
