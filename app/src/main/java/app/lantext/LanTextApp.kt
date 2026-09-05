@@ -5,6 +5,7 @@ import app.lantext.data.PairingManager
 import app.lantext.data.SettingsRepository
 import app.lantext.net.GatewayController
 import app.lantext.net.TlsCertificateStore
+import app.lantext.net.WifiGate
 import app.lantext.net.WifiMonitor
 import app.lantext.notify.Notifications
 import app.lantext.sms.ContactsRepository
@@ -43,6 +44,11 @@ class LanTextApp : Application() {
         wifi = WifiMonitor(this, settings, gateway)
         wifi.start()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            val saved = settings.current()
+            if (!saved.lastNetworkSsid.isNullOrBlank()) {
+                WifiGate.remember(saved.lastNetworkSsid, saved.lastNetworkIpv4)
+                gateway.onNetworkChanged()
+            }
             pairing.pendingPairing.collect { request ->
                 if (request != null) Notifications.pairing(this@LanTextApp, request)
                 else Notifications.cancelPairing(this@LanTextApp)

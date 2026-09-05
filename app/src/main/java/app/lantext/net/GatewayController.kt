@@ -120,6 +120,12 @@ class GatewayController(
             _snapshot.value = snap
             ToggleWidget.updateAll(context, snap)
         }
+        if (listening) {
+            val persistSsid = ssid ?: WifiGate.lastSsid
+            if (persistSsid != null && ip != null) {
+                scope.launch { settingsRepo.rememberLastNetwork(persistSsid, ip) }
+            }
+        }
     }
 
     @Synchronized

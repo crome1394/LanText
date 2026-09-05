@@ -11,6 +11,8 @@ data class AppSettings(
     val listenPort: Int = DEFAULT_PORT,
     val webPalette: String = "fern",
     val webMode: String = "auto",
+    val lastNetworkSsid: String? = null,
+    val lastNetworkIpv4: String? = null,
 ) {
     companion object {
         const val DEFAULT_PORT = 8743

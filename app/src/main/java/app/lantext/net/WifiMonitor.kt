@@ -161,6 +161,9 @@ class WifiMonitor(
         if (ssid != previous) {
             scope.launch { settings.rememberSsid(ssid) }
         }
+        if (ip != null) {
+            scope.launch { settings.rememberLastNetwork(ssid, ip) }
+        }
         reevaluate()
     }
 

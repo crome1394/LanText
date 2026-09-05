@@ -110,9 +110,23 @@ object WifiGate {
         if (!hasSmsPermission(context)) return GateReason.MISSING_SMS_PERMISSION
         if (!hasNotificationPermission(context)) return GateReason.MISSING_NOTIFICATION_PERMISSION
         if (settings.allowedSsids.isEmpty()) return GateReason.NO_NETWORK_SELECTED
+        val ip = wifiIpv4(context)
         val ssid = currentSsid(context)
+            ?: settings.lastNetworkSsid?.let { stored ->
+                val clean = normalizeSsid(stored)
+                if (clean != null &&
+                    clean in settings.allowedSsids &&
+                    ip != null &&
+                    ip == settings.lastNetworkIpv4
+                ) {
+                    remember(clean, ip)
+                    clean
+                } else {
+                    null
+                }
+            }
         if (ssid == null) {
-            return if (isOnWifi(context) || wifiIpv4(context) != null) GateReason.SSID_HIDDEN else GateReason.NO_WIFI
+            return if (isOnWifi(context) || ip != null) GateReason.SSID_HIDDEN else GateReason.NO_WIFI
         }
         if (ssid !in settings.allowedSsids) return GateReason.WRONG_NETWORK
         return GateReason.LISTENING

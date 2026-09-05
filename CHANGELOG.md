@@ -24,6 +24,9 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ### Fixed
 
+- Persist the last allowed SSID and its Wi-Fi IPv4 so the listener comes
+  back after a process restart when Android hides the network name in the
+  background (location is while-in-use only).
 - Resume the LAN listener after airplane mode, a MAC change, or a background
   Wi-Fi reconnect. Nearby devices was declared `neverForLocation`, so Android
   hid the SSID while LanText was in the background; the remembered network
@@ -39,9 +42,11 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 ### Changed
 
 - Remembered SSID is reused only for the same Wi-Fi IPv4, so a hidden name
-  cannot follow the phone onto another network. Wi-Fi re-evaluation skips
-  RSSI-only callbacks, and the known-SSID list is not rewritten on every
-  sighting. Content-Security-Policy `connect-src` is `'self'` only.
+  cannot follow the phone onto another network. That pair is also stored so
+  a process restart does not leave the listener stuck on “waiting for Wi-Fi”.
+  Wi-Fi re-evaluation skips RSSI-only callbacks, and the known-SSID list is
+  not rewritten on every sighting. Content-Security-Policy `connect-src` is
+  `'self'` only.
 
 ## [0.2.4] — 2026-08-30
 

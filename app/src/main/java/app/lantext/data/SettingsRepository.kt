@@ -27,6 +27,8 @@ class SettingsRepository(context: Context) {
             listenPort = prefs[KEY_PORT] ?: AppSettings.DEFAULT_PORT,
             webPalette = prefs[KEY_PALETTE] ?: "fern",
             webMode = prefs[KEY_MODE] ?: "auto",
+            lastNetworkSsid = prefs[KEY_LAST_SSID],
+            lastNetworkIpv4 = prefs[KEY_LAST_IPV4],
         )
     }
 
@@ -59,6 +61,10 @@ class SettingsRepository(context: Context) {
         store.edit { prefs ->
             prefs[KEY_ALLOWED] = (prefs[KEY_ALLOWED] ?: emptySet()) - ssid
             prefs[KEY_KNOWN] = (prefs[KEY_KNOWN] ?: emptySet()) - ssid
+            if (prefs[KEY_LAST_SSID] == ssid) {
+                prefs.remove(KEY_LAST_SSID)
+                prefs.remove(KEY_LAST_IPV4)
+            }
         }
     }
 
@@ -87,6 +93,18 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun rememberLastNetwork(ssid: String, ipv4: String) {
+        val clean = ssid.trim().trim('"')
+        val host = ipv4.trim()
+        if (clean.isEmpty() || clean == UNKNOWN_SSID || host.isEmpty()) return
+        val cur = current()
+        if (cur.lastNetworkSsid == clean && cur.lastNetworkIpv4 == host) return
+        store.edit {
+            it[KEY_LAST_SSID] = clean
+            it[KEY_LAST_IPV4] = host
+        }
+    }
+
     companion object {
         const val UNKNOWN_SSID = "<unknown ssid>"
         private val KEY_ENABLED = booleanPreferencesKey("enabled")
@@ -96,5 +114,7 @@ class SettingsRepository(context: Context) {
         private val KEY_PORT = intPreferencesKey("listen_port")
         private val KEY_PALETTE = stringPreferencesKey("web_palette")
         private val KEY_MODE = stringPreferencesKey("web_mode")
+        private val KEY_LAST_SSID = stringPreferencesKey("last_network_ssid")
+        private val KEY_LAST_IPV4 = stringPreferencesKey("last_network_ipv4")
     }
 }
