@@ -211,6 +211,9 @@ document.getElementById("theme-mode").addEventListener("click", (e) => {
   localStorage.setItem(THEME_MODE_KEY, btn.dataset.mode);
   applyTheme();
 });
+document.getElementById("refresh-btn").addEventListener("click", (e) => {
+  refreshInbox(e.shiftKey);
+});
 document.getElementById("theme-btn").addEventListener("click", openTheme);
 document.getElementById("pair-theme-btn").addEventListener("click", openTheme);
 document.getElementById("close-theme").addEventListener("click", closeTheme);
@@ -346,8 +349,8 @@ function scheduleReconnect() {
 }
 
 async function enterApp() {
-  await api("/api/v1/session");
   showApp();
+  await api("/api/v1/session");
   await loadInbox();
   wantEvents = true;
   connectEvents();
@@ -444,9 +447,19 @@ function moveConversation(delta) {
 async function boot() {
   registerServiceWorker();
   restoreInboxSnapshot();
+  if (token) {
+    showApp();
+    renderConversations(searchInput.value);
+  } else {
+    showPair();
+  }
   setupNotifications();
   try {
-    const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
+    const res = await fetch("/api/v1/meta", {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
     if (!res.ok) throw new Error("unreachable");
     const meta = await res.json();
     if (meta.fingerprint) {
@@ -467,6 +480,26 @@ async function boot() {
       showPair();
     }
     noteUnreachable("Can't reach the phone.", { showNow: true });
+    scheduleReconnect();
+  }
+}
+
+async function refreshInbox(fullReload) {
+  if (fullReload) {
+    location.reload();
+    return;
+  }
+  if (disconnectOverlay && disconnectOverlay.hidden === false) {
+    await reconnectToPhone();
+    return;
+  }
+  try {
+    connLabel.textContent = "Refreshing…";
+    await loadInbox();
+    if (wantEvents) connectEvents();
+    markLive();
+  } catch (_) {
+    noteUnreachable("Can't reach the phone.");
     scheduleReconnect();
   }
 }

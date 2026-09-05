@@ -1,4 +1,4 @@
-const CACHE = "lantext-shell-v7";
+const CACHE = "lantext-shell-v8";
 const SHELL = ["/", "/index.html", "/app.js", "/styles.css", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -40,7 +40,7 @@ self.addEventListener("fetch", (event) => {
 
 async function networkThenCache(request, pathname) {
   try {
-    const res = await fetch(request);
+    const res = await fetch(request, { signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const cache = await caches.open(CACHE);
       cache.put(request, res.clone());
@@ -52,12 +52,21 @@ async function networkThenCache(request, pathname) {
     }
     const cached = await fromCache(request);
     if (cached) return cached;
+    if (request.mode === "navigate") return offlinePage();
     return res;
   } catch (_) {
     const cached = await fromCache(request);
     if (cached) return cached;
+    if (request.mode === "navigate") return offlinePage();
     throw _;
   }
+}
+
+function offlinePage() {
+  return new Response(
+    "<!DOCTYPE html><html><head><meta charset=utf-8><title>LanText</title></head><body style='font-family:system-ui;padding:48px;text-align:center'><h1>Can't reach the phone</h1><p>Reload this tab once the phone is on the LAN.</p><p><button onclick='location.reload()'>Reload</button></p></body></html>",
+    { headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
 }
 
 async function fromCache(request) {
