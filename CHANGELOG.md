@@ -35,7 +35,8 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 - After a full browser restart the inbox no longer stays blank while the
   phone is still coming up: the UI paints immediately, boot fetch times
   out, and a Refresh button reloads the inbox (Shift-click reloads the
-  page).
+  page). Pairing no longer does a full page reload if a cached page is
+  missing the Refresh button, and a rejected PIN shows the reason.
 - Conversation search now keeps threads that match a keyword in an older
   message (not only the latest snippet), and also searches MMS text.
 - Persist the last allowed SSID and its Wi-Fi IPv4 so the listener comes

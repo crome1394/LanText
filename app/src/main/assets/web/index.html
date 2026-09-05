@@ -26,7 +26,7 @@
         <h1>LanText</h1>
         <p class="lede">This page is served by your phone on your home Wi-Fi. Enter the PIN shown in the LanText app, then approve the request on the phone.</p>
         <p id="fp-line" class="fingerprint"></p>
-        <form id="pair-form">
+        <form id="pair-form" method="dialog">
           <label for="pin">Pairing PIN</label>
           <input id="pin" name="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]{8}" placeholder="00000000" required />
           <button type="submit" id="pair-btn">Pair this computer</button>

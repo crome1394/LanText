@@ -211,12 +211,17 @@ document.getElementById("theme-mode").addEventListener("click", (e) => {
   localStorage.setItem(THEME_MODE_KEY, btn.dataset.mode);
   applyTheme();
 });
-document.getElementById("refresh-btn").addEventListener("click", (e) => {
+function on(id, ev, fn) {
+  const node = typeof id === "string" ? document.getElementById(id) : id;
+  if (!node) return;
+  node.addEventListener(ev, fn);
+}
+on("refresh-btn", "click", (e) => {
   refreshInbox(e.shiftKey);
 });
-document.getElementById("theme-btn").addEventListener("click", openTheme);
-document.getElementById("pair-theme-btn").addEventListener("click", openTheme);
-document.getElementById("close-theme").addEventListener("click", closeTheme);
+on("theme-btn", "click", openTheme);
+on("pair-theme-btn", "click", openTheme);
+on("close-theme", "click", closeTheme);
 themeModal.addEventListener("click", (e) => {
   if (e.target === themeModal) closeTheme();
 });
@@ -393,6 +398,8 @@ function showPair() {
   }
   pairView.hidden = false;
   appView.hidden = true;
+  if (disconnectOverlay) disconnectOverlay.hidden = true;
+  document.body.classList.remove("disconnected");
   closeNewModal();
   closeHelp();
   closeTheme();
@@ -476,11 +483,12 @@ async function boot() {
     if (token) {
       showApp();
       renderConversations(searchInput.value);
+      noteUnreachable("Can't reach the phone.", { showNow: true });
+      scheduleReconnect();
     } else {
       showPair();
+      pairStatus.textContent = "Could not reach the phone. Check the PIN on the app and try again.";
     }
-    noteUnreachable("Can't reach the phone.", { showNow: true });
-    scheduleReconnect();
   }
 }
 
@@ -504,33 +512,45 @@ async function refreshInbox(fullReload) {
   }
 }
 
-pairForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
+async function startPair(e) {
+  if (e) e.preventDefault();
+  const pin = document.getElementById("pin").value.trim();
+  if (!/^\d{8}$/.test(pin)) {
+    pairStatus.textContent = "Enter the 8-digit PIN from the LanText app.";
+    return;
+  }
   pairStatus.textContent = "Waiting for approval on your phone…";
   try {
-    const pin = document.getElementById("pin").value.trim();
     const started = await fetch("/api/v1/pair", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pin, clientName: navigator.userAgent.slice(0, 60) }),
+      credentials: "include",
     });
     if (!started.ok) {
-      pairStatus.textContent = "PIN rejected. Check the app and try again.";
+      let err = "PIN rejected";
+      try { err = (await started.json()).error || err; } catch (_) {}
+      pairStatus.textContent = err === "expired"
+        ? "That PIN expired. Use the PIN currently shown in the app."
+        : err === "locked"
+          ? "Too many attempts. Wait a moment and try again."
+          : "PIN rejected. Check the PIN on the phone and try again.";
       return;
     }
     const { requestId } = await started.json();
     const tokenFound = await pollPair(requestId);
     if (!tokenFound) {
-      pairStatus.textContent = "Pairing was denied or expired.";
+      pairStatus.textContent = "Pairing was denied or expired. Approve on the phone, then try again.";
       return;
     }
     token = tokenFound;
     localStorage.setItem(TOKEN_KEY, token);
     await enterApp();
   } catch (err) {
-    pairStatus.textContent = err.message;
+    pairStatus.textContent = err.message || "Could not reach the phone.";
   }
-});
+}
+if (pairForm) pairForm.addEventListener("submit", startPair);
 
 async function pollPair(requestId) {
   for (let i = 0; i < 60; i++) {
