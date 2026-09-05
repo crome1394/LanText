@@ -49,6 +49,25 @@ data class ContactDto(
 )
 
 @Serializable
+data class LabeledValue(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class ContactDetailsDto(
+    val id: String?,
+    val name: String,
+    val photoUrl: String?,
+    val avatarColor: String,
+    val phones: List<LabeledValue> = emptyList(),
+    val emails: List<LabeledValue> = emptyList(),
+    val org: String? = null,
+    val title: String? = null,
+    val postal: String? = null,
+)
+
+@Serializable
 data class SendRequest(
     val recipients: List<String> = emptyList(),
     val body: String = "",

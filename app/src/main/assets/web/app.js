@@ -585,12 +585,16 @@ function showDesktopNotice({ title, body, threadId }) {
   } catch (_) {}
 }
 
+let searchMatchIds = null;
 function renderConversations(filter) {
   const q = (filter || "").trim().toLowerCase();
   convoList.innerHTML = "";
-  const list = q
-    ? conversations.filter((c) => (c.displayName + " " + c.address + " " + c.snippet).toLowerCase().includes(q))
-    : conversations;
+  const list = !q
+    ? conversations
+    : conversations.filter((c) => {
+        if (searchMatchIds && searchMatchIds.has(c.id)) return true;
+        return (c.displayName + " " + c.address + " " + c.snippet).toLowerCase().includes(q);
+      });
   if (!list.length) {
     convoList.innerHTML = "<p class='muted' style='padding:16px'>No conversations</p>";
     return;
@@ -615,19 +619,27 @@ searchInput.addEventListener("input", () => {
   const q = searchInput.value.trim();
   if (q.length >= 2) {
     api("/api/v1/search?q=" + encodeURIComponent(q)).then((hits) => {
-      const seen = new Set();
+      searchMatchIds = new Set();
       const list = [];
+      const seen = new Set();
       for (const hit of hits) {
-        if (!seen.has(hit.conversation.id)) {
-          seen.add(hit.conversation.id);
-          list.push(hit.conversation);
+        const convo = hit.conversation;
+        if (hit.message && hit.message.body) convo.snippet = hit.message.body;
+        searchMatchIds.add(convo.id);
+        if (!seen.has(convo.id)) {
+          seen.add(convo.id);
+          list.push(convo);
         }
       }
       conversations = mergeById(conversations, list);
       renderConversations(q);
-    }).catch(() => renderConversations(q));
+    }).catch(() => {
+      searchMatchIds = null;
+      renderConversations(q);
+    });
   } else {
-    renderConversations(q);
+    searchMatchIds = null;
+    renderConversations("");
   }
 });
 
@@ -805,9 +817,39 @@ async function searchGifs(q) {
       btn.addEventListener("click", () => pickGif(hit));
       gifGrid.appendChild(btn);
     }
+    bindGifHover();
+  } catch (err) {
   } catch (err) {
     gifStatus.textContent = err.message || "Could not search GIFs";
   }
+}
+function bindGifHover() {
+  const hover = document.getElementById("gif-hover");
+  const hoverImg = document.getElementById("gif-hover-img");
+  if (!hover || !gifGrid || gifGrid.dataset.hoverBound) return;
+  gifGrid.dataset.hoverBound = "1";
+  gifGrid.addEventListener("mouseover", (e) => {
+    const img = e.target.closest("img");
+    if (!img) return;
+    hoverImg.src = img.currentSrc || img.src;
+    hover.hidden = false;
+    const rect = img.getBoundingClientRect();
+    hover.style.left = (rect.right + 12) + "px";
+    hover.style.top = rect.top + "px";
+    requestAnimationFrame(() => {
+      const box = hover.getBoundingClientRect();
+      let left = rect.right + 12;
+      let top = rect.top;
+      if (box.right > window.innerWidth - 8) left = rect.left - box.width - 12;
+      if (box.bottom > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.height - 8);
+      hover.style.left = Math.max(8, left) + "px";
+      hover.style.top = Math.max(8, top) + "px";
+    });
+  });
+  gifGrid.addEventListener("mouseleave", () => {
+    hover.hidden = true;
+    hoverImg.removeAttribute("src");
+  });
 }
 function pickGif(hit) {
   const fileish = { name: (hit.title || "gif") + ".gif", type: "image/gif" };
@@ -1086,6 +1128,68 @@ document.getElementById("new-emoji-btn").addEventListener("click", () => {
   document.getElementById("new-body").focus();
 });
 pdfBtn.addEventListener("click", downloadThreadPdf);
+document.getElementById("copy-number-btn").addEventListener("click", async () => {
+  const convo = conversations.find((c) => c.id === selectedId);
+  const text = ((convo?.recipients || []).filter(Boolean).join("\n") || convo?.address || "").trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  const btn = document.getElementById("copy-number-btn");
+  const prev = btn.textContent;
+  btn.textContent = "Copied";
+  setTimeout(() => { btn.textContent = prev; }, 1200);
+});
+const peopleModal = document.getElementById("people-modal");
+const peopleList = document.getElementById("people-list");
+document.getElementById("people-btn").addEventListener("click", showPeople);
+document.getElementById("close-people").addEventListener("click", () => { peopleModal.hidden = true; });
+peopleModal.addEventListener("click", (e) => { if (e.target === peopleModal) peopleModal.hidden = true; });
+async function showPeople() {
+  if (!selectedId) return;
+  peopleList.innerHTML = "<p class='muted'>Loading…</p>";
+  peopleModal.hidden = false;
+  try {
+    const people = await api("/api/v1/conversations/" + encodeURIComponent(selectedId) + "/people");
+    peopleList.innerHTML = "";
+    if (!people.length) {
+      peopleList.innerHTML = "<p class='muted'>No numbers on this thread.</p>";
+      return;
+    }
+    for (const p of people) {
+      const el = document.createElement("div");
+      el.className = "people-card";
+      let rows = "";
+      for (const phone of p.phones || []) {
+        rows += `<div class="people-row"><span class="muted">${escapeHtml(phone.label)}</span><span>${escapeHtml(phone.value)}</span><button type="button" class="text-btn" data-copy="${escapeHtml(phone.value)}">Copy</button></div>`;
+      }
+      for (const email of p.emails || []) {
+        rows += `<div class="people-row"><span class="muted">${escapeHtml(email.label)}</span><span>${escapeHtml(email.value)}</span><button type="button" class="text-btn" data-copy="${escapeHtml(email.value)}">Copy</button></div>`;
+      }
+      if (p.org) rows += `<div class="people-row"><span class="muted">Org</span><span>${escapeHtml(p.org)}${p.title ? " · " + escapeHtml(p.title) : ""}</span></div>`;
+      if (p.postal) rows += `<div class="people-row"><span class="muted">Address</span><span>${escapeHtml(p.postal)}</span></div>`;
+      el.innerHTML = `${avatarHtml(p.name, p.avatarColor, p.photoUrl)}<div class="people-meta"><h3>${escapeHtml(p.name)}</h3>${rows || "<p class='muted'>No extra details</p>"}</div>`;
+      el.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const value = btn.getAttribute("data-copy") || "";
+          try { await navigator.clipboard.writeText(value); } catch (_) {}
+          btn.textContent = "Copied";
+          setTimeout(() => { btn.textContent = "Copy"; }, 1200);
+        });
+      });
+      peopleList.appendChild(el);
+    }
+  } catch (err) {
+    peopleList.innerHTML = "<p class='muted'>" + escapeHtml(err.message || "Could not load details") + "</p>";
+  }
+}
 async function downloadThreadPdf() {
   if (!selectedId) return;
   try {
@@ -1245,6 +1349,7 @@ document.addEventListener("keydown", (e) => {
     if (gifPanel && !gifPanel.hidden) { gifPanel.hidden = true; e.preventDefault(); return; }
     if (!helpModal.hidden) { closeHelp(); e.preventDefault(); return; }
     if (!themeModal.hidden) { closeTheme(); e.preventDefault(); return; }
+    if (peopleModal && !peopleModal.hidden) { peopleModal.hidden = true; e.preventDefault(); return; }
     if (!contactModal.hidden) { closeContactModal(); e.preventDefault(); return; }
     if (!newModal.hidden) { closeNewModal(); e.preventDefault(); return; }
     if (document.activeElement === composeText) { composeText.blur(); return; }

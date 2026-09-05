@@ -413,7 +413,41 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
 .bubble.in { background: var(--incoming); align-self: flex-start; border-bottom-left-radius: 4px; }
 .bubble.out { background: var(--outgoing); color: var(--outgoing-ink); align-self: flex-end; border-bottom-right-radius: 4px; }
 .bubble img { max-width: 240px; border-radius: 10px; display: block; margin-bottom: 6px; cursor: zoom-in; }
-#pdf-btn { margin-left: auto; }
+#copy-number-btn { margin-left: auto; }
+#gif-hover {
+  position: fixed;
+  z-index: 45;
+  pointer-events: none;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+#gif-hover img {
+  display: block;
+  max-width: min(280px, 70vw);
+  max-height: min(280px, 50vh);
+  border-radius: 8px;
+}
+.people-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.people-card:last-child { border-bottom: 0; }
+.people-meta { min-width: 0; flex: 1; }
+.people-meta h3 { margin: 0 0 4px; font-size: 1rem; }
+.people-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 0.9rem;
+}
+.people-row .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-row button { flex-shrink: 0; }
 .emoji-panel {
   display: grid;
   grid-template-columns: repeat(8, 1fr);

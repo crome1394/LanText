@@ -66,6 +66,8 @@
               <h2 id="thread-name"></h2>
               <p id="thread-number" class="muted"></p>
             </div>
+            <button type="button" id="copy-number-btn" class="text-btn" title="Copy phone number">Copy</button>
+            <button type="button" id="people-btn" class="text-btn" title="Contact details">Details</button>
             <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">PDF</button>
             <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
@@ -150,6 +152,15 @@
         <div class="theme-grid" id="theme-grid"></div>
       </div>
     </div>
+    <div id="people-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header>
+          <h2>People in this thread</h2>
+          <button type="button" id="close-people" class="icon-btn">×</button>
+        </header>
+        <div id="people-list"></div>
+      </div>
+    </div>
     <div id="contact-modal" class="modal" hidden>
       <div class="modal-card">
         <header>
@@ -174,6 +185,9 @@
         </form>
       </div>
     </div>
+  </div>
+  <div id="gif-hover" hidden>
+    <img id="gif-hover-img" alt="" />
   </div>
   <div id="lightbox" hidden>
     <img id="lightbox-img" alt="" />

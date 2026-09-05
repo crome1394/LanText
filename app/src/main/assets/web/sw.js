@@ -1,4 +1,4 @@
-const CACHE = "lantext-shell-v6";
+const CACHE = "lantext-shell-v7";
 const SHELL = ["/", "/index.html", "/app.js", "/styles.css", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {

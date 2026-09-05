@@ -211,6 +211,16 @@ class GatewayServer(
                     }
                     method == Method.GET && uri == "/api/v1/search" ->
                         jsonRaw(json.encodeToString(sms.search(q("q"))))
+                    method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/people")) -> {
+                        val id = uri.split("/")[4]
+                        contacts.refresh()
+                        var numbers = sms.participants(id, "")
+                        if (numbers.isEmpty()) {
+                            val convo = sms.conversations().firstOrNull { it.id == id }
+                            numbers = convo?.recipients.orEmpty()
+                        }
+                        jsonRaw(json.encodeToString(contacts.detailsForNumbers(numbers)))
+                    }
                     method == Method.GET && uri == "/api/v1/contacts" -> {
                         contacts.refresh()
                         jsonRaw(json.encodeToString(contacts.search(q("q"))))

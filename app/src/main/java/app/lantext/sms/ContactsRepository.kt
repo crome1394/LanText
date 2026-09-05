@@ -171,6 +171,101 @@ class ContactsRepository(private val context: Context) {
         return PhoneNumbers.display(address, region).ifBlank { address.orEmpty() }
     }
 
+    fun detailsForNumbers(numbers: List<String>): List<ContactDetailsDto> {
+        val seen = LinkedHashSet<String>()
+        val out = mutableListOf<ContactDetailsDto>()
+        for (raw in numbers) {
+            val number = raw.trim()
+            if (number.isBlank()) continue
+            val key = PhoneNumbers.normalize(number, region).ifBlank { PhoneNumbers.digitsKeepPlus(number) }
+            if (!seen.add(key.ifBlank { number })) continue
+            val contact = lookup(number)
+            out += if (contact == null) {
+                ContactDetailsDto(
+                    id = null,
+                    name = PhoneNumbers.display(number, region).ifBlank { number },
+                    photoUrl = null,
+                    avatarColor = avatarColor(number),
+                    phones = listOf(LabeledValue("Phone", number)),
+                )
+            } else {
+                loadDetails(contact)
+            }
+        }
+        return out
+    }
+
+    private fun loadDetails(contact: Contact): ContactDetailsDto {
+        val phones = mutableListOf<LabeledValue>()
+        val emails = mutableListOf<LabeledValue>()
+        var org: String? = null
+        var title: String? = null
+        var postal: String? = null
+        context.contentResolver.query(
+            ContactsContract.Data.CONTENT_URI,
+            arrayOf(
+                ContactsContract.Data.MIMETYPE,
+                ContactsContract.Data.DATA1,
+                ContactsContract.Data.DATA2,
+                ContactsContract.Data.DATA3,
+                ContactsContract.Data.DATA4,
+            ),
+            "${ContactsContract.Data.CONTACT_ID}=?",
+            arrayOf(contact.id),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val mime = cursor.getString(0).orEmpty()
+                val data1 = cursor.getString(1).orEmpty()
+                if (data1.isBlank()) continue
+                when (mime) {
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE ->
+                        phones += LabeledValue(phoneLabel(cursor.getInt(2), cursor.getString(3)), data1)
+                    ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE ->
+                        emails += LabeledValue(emailLabel(cursor.getInt(2), cursor.getString(3)), data1)
+                    ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE -> {
+                        if (org.isNullOrBlank()) org = data1
+                        val job = cursor.getString(4)
+                        if (title.isNullOrBlank() && !job.isNullOrBlank()) title = job
+                    }
+                    ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE ->
+                        if (postal.isNullOrBlank()) postal = data1
+                }
+            }
+        }
+        if (phones.none { it.value == contact.number }) {
+            phones.add(0, LabeledValue("Phone", contact.number))
+        }
+        return ContactDetailsDto(
+            id = contact.id,
+            name = contact.name,
+            photoUrl = photoUrl(contact.number),
+            avatarColor = contact.color,
+            phones = phones.distinctBy { it.value },
+            emails = emails.distinctBy { it.value },
+            org = org,
+            title = title,
+            postal = postal,
+        )
+    }
+
+    private fun phoneLabel(type: Int, custom: String?): String = when (type) {
+        ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE -> "Mobile"
+        ContactsContract.CommonDataKinds.Phone.TYPE_HOME -> "Home"
+        ContactsContract.CommonDataKinds.Phone.TYPE_WORK -> "Work"
+        ContactsContract.CommonDataKinds.Phone.TYPE_MAIN -> "Main"
+        ContactsContract.CommonDataKinds.Phone.TYPE_FAX_WORK -> "Work fax"
+        ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM -> custom?.ifBlank { "Phone" } ?: "Phone"
+        else -> "Phone"
+    }
+
+    private fun emailLabel(type: Int, custom: String?): String = when (type) {
+        ContactsContract.CommonDataKinds.Email.TYPE_HOME -> "Home"
+        ContactsContract.CommonDataKinds.Email.TYPE_WORK -> "Work"
+        ContactsContract.CommonDataKinds.Email.TYPE_CUSTOM -> custom?.ifBlank { "Email" } ?: "Email"
+        else -> "Email"
+    }
+
     fun photoUrl(address: String?): String? {
         val contact = lookup(address) ?: return null
         if (contact.photoUri == null) return null

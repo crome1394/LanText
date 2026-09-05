@@ -25,10 +25,15 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
   picture-message rules, not RCS).
 - GIF picker (search + tap) sends a small GIF as MMS. Paste or attach a
   `.gif` also works. Tenor’s third-party API is gone, so search uses
-  Openverse / Wikimedia files small enough for MMS.
+  Openverse / Wikimedia files small enough for MMS. Hover a result to
+  preview the animation in a popup.
+- Copy the thread’s phone number(s), and a Details view of everyone in
+  a 1:1 or group thread (phones, emails, org).
 
 ### Fixed
 
+- Conversation search now keeps threads that match a keyword in an older
+  message (not only the latest snippet), and also searches MMS text.
 - Persist the last allowed SSID and its Wi-Fi IPv4 so the listener comes
   back after a process restart when Android hides the network name in the
   background (location is while-in-use only).
