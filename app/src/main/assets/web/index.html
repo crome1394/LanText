@@ -66,15 +66,18 @@
               <h2 id="thread-name"></h2>
               <p id="thread-number" class="muted"></p>
             </div>
+            <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">PDF</button>
             <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
           <div id="messages" class="messages"></div>
           <form id="composer">
             <input id="file-input" type="file" accept="image/*" hidden />
             <button type="button" id="attach-btn" class="icon-btn" title="Attach or paste a picture">📎</button>
+            <button type="button" id="emoji-btn" class="icon-btn" title="Emoji">😊</button>
             <div class="compose-main">
               <div id="pending-preview" hidden></div>
               <textarea id="compose-text" rows="1" placeholder="Message or paste a picture" title="Enter to send, Shift+Enter for a new line, paste an image to attach"></textarea>
+              <div id="emoji-panel" class="emoji-panel" hidden></div>
               <p class="compose-hint">Enter to send · paste or drop a picture to attach · Shift+Enter for a new line</p>
             </div>
             <button type="submit" id="send-btn" title="Send (Enter)">Send</button>
@@ -97,6 +100,7 @@
           <textarea id="new-body" rows="3" placeholder="Message (Enter to send, paste a picture)"></textarea>
           <div class="new-actions">
             <button type="button" id="new-attach-btn">Attach picture</button>
+            <button type="button" id="new-emoji-btn">Emoji</button>
             <button type="submit">Send</button>
           </div>
         </form>
@@ -161,6 +165,9 @@
         </form>
       </div>
     </div>
+  </div>
+  <div id="lightbox" hidden>
+    <img id="lightbox-img" alt="" />
   </div>
   <div id="disconnect-overlay" hidden>
     <div class="disconnect-card" role="alertdialog" aria-labelledby="disconnect-title" aria-describedby="disconnect-copy">

@@ -74,3 +74,9 @@ data class CreateContactRequest(
 data class AddPhoneRequest(
     val number: String = "",
 )
+
+@Serializable
+data class AppearanceRequest(
+    val palette: String = "fern",
+    val mode: String = "auto",
+)

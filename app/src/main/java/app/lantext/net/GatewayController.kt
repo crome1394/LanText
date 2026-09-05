@@ -113,6 +113,8 @@ class GatewayController(
             pairingPin = if (listening) pin else null,
             reason = reason,
             clientCount = clients,
+            webPalette = settings.webPalette,
+            webMode = settings.webMode,
         )
         if (snap != previous) {
             _snapshot.value = snap

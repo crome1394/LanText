@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.lantext.util.ListenPort
+import app.lantext.widget.WidgetTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -23,6 +25,8 @@ class SettingsRepository(context: Context) {
             allowedSsids = prefs[KEY_ALLOWED] ?: emptySet(),
             knownSsids = prefs[KEY_KNOWN] ?: emptySet(),
             listenPort = prefs[KEY_PORT] ?: AppSettings.DEFAULT_PORT,
+            webPalette = prefs[KEY_PALETTE] ?: "fern",
+            webMode = prefs[KEY_MODE] ?: "auto",
         )
     }
 
@@ -65,6 +69,15 @@ class SettingsRepository(context: Context) {
         store.edit { it[KEY_PORT] = port }
     }
 
+    suspend fun setAppearance(palette: String, mode: String) {
+        val p = WidgetTheme.normalizePalette(palette)
+        val m = WidgetTheme.normalizeMode(mode)
+        store.edit {
+            it[KEY_PALETTE] = p
+            it[KEY_MODE] = m
+        }
+    }
+
     suspend fun rememberSsid(ssid: String) {
         val clean = ssid.trim().trim('"')
         if (clean.isEmpty() || clean == UNKNOWN_SSID) return
@@ -81,5 +94,7 @@ class SettingsRepository(context: Context) {
         private val KEY_ALLOWED = stringSetPreferencesKey("allowed_ssids")
         private val KEY_KNOWN = stringSetPreferencesKey("known_ssids")
         private val KEY_PORT = intPreferencesKey("listen_port")
+        private val KEY_PALETTE = stringPreferencesKey("web_palette")
+        private val KEY_MODE = stringPreferencesKey("web_mode")
     }
 }

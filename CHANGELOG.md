@@ -10,6 +10,16 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Added
+
+- Emoji picker on the web composer (thread and new message).
+- Choosing a web appearance updates the home-screen widget colors.
+- Desktop notification permission is requested when the inbox loads; the
+  enable banner remains if the browser still needs a click.
+- Click a picture in a thread to expand it to fill the tab; click or Esc to
+  close.
+- Download thread as a PDF (dates and times on every message).
+
 ### Fixed
 
 - Resume the LAN listener after airplane mode, a MAC change, or a background

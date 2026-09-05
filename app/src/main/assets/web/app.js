@@ -48,6 +48,14 @@ const newPendingPreview = document.getElementById("new-pending-preview");
 const disconnectOverlay = document.getElementById("disconnect-overlay");
 const disconnectStatus = document.getElementById("disconnect-status");
 const reconnectBtn = document.getElementById("reconnect-btn");
+const emojiPanel = document.getElementById("emoji-panel");
+const emojiBtn = document.getElementById("emoji-btn");
+const pdfBtn = document.getElementById("pdf-btn");
+const EMOJI = [
+  "😀","😁","😂","🤣","😊","😇","🙂","😉","😍","😘","😜","🤔","🙄","😏","😢","😭","😤","😡",
+  "🤯","😱","😴","🤗","🙌","👍","👎","👏","🙏","💪","🔥","❤️","💯","✨","🎉","✅","❌","⭐",
+  "👋","🤝","👀","💬","📱","💻","🏠","☀️","🌙","🌧️","☕","🍕","🍰","🎵","📸","💡","🔒","📍","🚗","✈️",
+];
 
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let conversations = [];
@@ -87,6 +95,16 @@ function applyTheme() {
   root.dataset.mode = mode;
   root.dataset.resolved = resolvedMode(mode);
   syncThemeControls();
+  if (appearanceReady) syncAppearance();
+}
+let appearanceReady = false;
+function syncAppearance() {
+  fetch("/api/v1/appearance", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    credentials: "include",
+    body: JSON.stringify({ palette: currentPalette(), mode: currentMode() }),
+  }).catch(() => {});
 }
 function syncThemeControls() {
   const palette = currentPalette();
@@ -271,6 +289,8 @@ async function enterApp() {
   await loadInbox();
   wantEvents = true;
   connectEvents();
+  appearanceReady = true;
+  syncAppearance();
   setupNotifications();
   markLive();
 }
@@ -338,6 +358,7 @@ function openNewModal() {
 
 function closeNewModal() {
   newModal.hidden = true;
+  if (emojiPanel) emojiPanel.hidden = true;
 }
 
 function openHelp() { helpModal.hidden = false; }
@@ -360,6 +381,7 @@ function moveConversation(delta) {
 async function boot() {
   registerServiceWorker();
   restoreInboxSnapshot();
+  setupNotifications();
   try {
     const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
     if (!res.ok) throw new Error("unreachable");
@@ -462,13 +484,14 @@ function notifyFromInbox(prev, next) {
   }
 }
 
-function setupNotifications() {
+async function setupNotifications() {
   if (!("Notification" in window)) return;
   if (Notification.permission === "default") {
-    notifyBanner.hidden = false;
-  } else {
-    notifyBanner.hidden = true;
+    try {
+      await Notification.requestPermission();
+    } catch (_) {}
   }
+  notifyBanner.hidden = Notification.permission !== "default";
 }
 
 notifyBanner.addEventListener("click", async () => {
@@ -580,7 +603,7 @@ function renderMessages(msgs) {
     let html = "";
     for (const att of m.attachments || []) {
       if ((att.mimeType || "").startsWith("image/")) {
-        html += `<img alt="" src="${att.url}" />`;
+        html += `<img alt="" src="${escapeHtml(att.url)}" />`;
       }
     }
     html += linkify(m.body || "");
@@ -590,6 +613,24 @@ function renderMessages(msgs) {
   }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
+
+const lightbox = document.getElementById("lightbox");
+const lightboxImg = document.getElementById("lightbox-img");
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.hidden = false;
+}
+function closeLightbox() {
+  lightbox.hidden = true;
+  lightboxImg.removeAttribute("src");
+}
+messagesEl.addEventListener("click", (e) => {
+  const img = e.target.closest("img");
+  if (!img) return;
+  e.preventDefault();
+  openLightbox(img.currentSrc || img.src);
+});
+lightbox.addEventListener("click", closeLightbox);
 
 composeText.addEventListener("input", () => {
   composeText.style.height = "auto";
@@ -655,6 +696,69 @@ newModal.addEventListener("drop", (e) => {
 });
 
 document.getElementById("attach-btn").addEventListener("click", () => fileInput.click());
+function insertEmoji(textarea, emoji) {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? start;
+  textarea.value = textarea.value.slice(0, start) + emoji + textarea.value.slice(end);
+  const pos = start + emoji.length;
+  textarea.selectionStart = textarea.selectionEnd = pos;
+  textarea.focus();
+  textarea.dispatchEvent(new Event("input"));
+}
+function fillEmojiPanel() {
+  if (!emojiPanel || emojiPanel.childElementCount) return;
+  for (const glyph of EMOJI) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = glyph;
+    btn.addEventListener("click", () => {
+      const target = !newModal.hidden ? document.getElementById("new-body") : composeText;
+      insertEmoji(target, glyph);
+    });
+    emojiPanel.appendChild(btn);
+  }
+}
+emojiBtn.addEventListener("click", () => {
+  fillEmojiPanel();
+  composeText.closest(".compose-main").appendChild(emojiPanel);
+  emojiPanel.hidden = !emojiPanel.hidden;
+});
+document.getElementById("new-emoji-btn").addEventListener("click", () => {
+  fillEmojiPanel();
+  const form = document.getElementById("new-form");
+  form.insertBefore(emojiPanel, form.querySelector(".new-actions"));
+  emojiPanel.hidden = false;
+  document.getElementById("new-body").focus();
+});
+pdfBtn.addEventListener("click", downloadThreadPdf);
+async function downloadThreadPdf() {
+  if (!selectedId) return;
+  try {
+    const res = await fetch("/api/v1/conversations/" + encodeURIComponent(selectedId) + "/pdf", {
+      headers: authHeaders(),
+      credentials: "include",
+    });
+    if (res.status === 401) {
+      token = "";
+      localStorage.removeItem(TOKEN_KEY);
+      showPair();
+      throw new Error("unpaired");
+    }
+    if (!res.ok) throw new Error("export failed");
+    const blob = await res.blob();
+    const header = res.headers.get("content-disposition") || "";
+    const match = /filename=\"([^\"]+)\"/.exec(header);
+    const fallback = "LanText-" + (document.getElementById("thread-name").textContent || "thread").replace(/[^\w.-]+/g, "-") + ".pdf";
+    const a = document.createElement("a");
+    const href = URL.createObjectURL(blob);
+    a.href = href;
+    a.download = match ? match[1] : fallback;
+    a.click();
+    URL.revokeObjectURL(href);
+  } catch (err) {
+    alert(err.message || "Could not download this thread.");
+  }
+}
 fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) setPendingImage(fileInput.files[0]);
 });
@@ -770,6 +874,8 @@ helpModal.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === "Escape") {
+    if (!lightbox.hidden) { closeLightbox(); e.preventDefault(); return; }
+    if (emojiPanel && !emojiPanel.hidden) { emojiPanel.hidden = true; e.preventDefault(); return; }
     if (!helpModal.hidden) { closeHelp(); e.preventDefault(); return; }
     if (!themeModal.hidden) { closeTheme(); e.preventDefault(); return; }
     if (!contactModal.hidden) { closeContactModal(); e.preventDefault(); return; }

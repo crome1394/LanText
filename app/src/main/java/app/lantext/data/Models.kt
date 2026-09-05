@@ -9,6 +9,8 @@ data class AppSettings(
     val allowedSsids: Set<String> = emptySet(),
     val knownSsids: Set<String> = emptySet(),
     val listenPort: Int = DEFAULT_PORT,
+    val webPalette: String = "fern",
+    val webMode: String = "auto",
 ) {
     companion object {
         const val DEFAULT_PORT = 8743
@@ -70,4 +72,6 @@ data class GatewaySnapshot(
     val pairingPin: String? = null,
     val reason: GateReason = GateReason.DISABLED,
     val clientCount: Int = 0,
+    val webPalette: String = "fern",
+    val webMode: String = "auto",
 )

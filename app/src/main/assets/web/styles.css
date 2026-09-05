@@ -412,7 +412,46 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
 }
 .bubble.in { background: var(--incoming); align-self: flex-start; border-bottom-left-radius: 4px; }
 .bubble.out { background: var(--outgoing); color: var(--outgoing-ink); align-self: flex-end; border-bottom-right-radius: 4px; }
-.bubble img { max-width: 240px; border-radius: 10px; display: block; margin-bottom: 6px; }
+.bubble img { max-width: 240px; border-radius: 10px; display: block; margin-bottom: 6px; cursor: zoom-in; }
+#pdf-btn { margin-left: auto; }
+.emoji-panel {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  max-height: 180px;
+  overflow: auto;
+  margin: 6px 0 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.emoji-panel button {
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  padding: 2px;
+}
+.emoji-panel button:hover { background: var(--incoming); }
+#lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 12, 11, 0.88);
+  cursor: zoom-out;
+  padding: 0;
+}
+#lightbox img {
+  max-width: 100vw;
+  max-height: 100vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
 .meta { font-size: 0.7rem; opacity: 0.75; margin-top: 4px; }
 
 #composer {
@@ -470,7 +509,6 @@ kbd {
   white-space: nowrap;
 }
 .pair-card .text-btn { display: block; margin: 16px auto 0; }
-#save-contact-btn { margin-left: auto; }
 
 .seg {
   display: flex;

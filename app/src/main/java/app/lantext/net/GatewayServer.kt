@@ -5,10 +5,12 @@ import android.webkit.MimeTypeMap
 import app.lantext.data.PairedDevice
 import app.lantext.data.PairingManager
 import app.lantext.sms.AddPhoneRequest
+import app.lantext.sms.AppearanceRequest
 import app.lantext.sms.ContactsRepository
 import app.lantext.sms.CreateContactRequest
 import app.lantext.sms.SendRequest
 import app.lantext.sms.SmsRepository
+import app.lantext.sms.ThreadPdf
 import app.lantext.util.PrivateNetwork
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
@@ -235,6 +237,26 @@ class GatewayServer(
                             ?: return@runBlocking notFound()
                         bytes(part.second, part.first)
                     }
+                    method == Method.POST && uri == "/api/v1/appearance" -> {
+                        val req = json.decodeFromString<AppearanceRequest>(readBody(session))
+                        app.lantext.LanTextApp.instance.settings.setAppearance(req.palette, req.mode)
+                        json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/pdf")) -> {
+                        val id = uri.split("/")[4]
+                        val convo = sms.conversations().firstOrNull { it.id == id }
+                        val msgs = sms.messages(id, null, 1500)
+                        val pdf = ThreadPdf.render(
+                            title = convo?.displayName ?: "Conversation",
+                            subtitle = convo?.address.orEmpty(),
+                            messages = msgs,
+                            loadImage = { partId -> sms.mediaPart(partId)?.second },
+                        )
+                        val filename = ThreadPdf.fileName(convo?.displayName ?: "thread")
+                        val res = bytes(pdf, "application/pdf")
+                        res.addHeader("Content-Disposition", "attachment; filename=\"$filename\"")
+                        res
+                    }
                     else -> json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
                 }
             }
@@ -350,6 +372,7 @@ class GatewayServer(
             "css" -> "text/css"
             "svg" -> "image/svg+xml"
             "png" -> "image/png"
+            "pdf" -> "application/pdf"
             else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
         }
     }
