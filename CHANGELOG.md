@@ -20,7 +20,9 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 - Web inbox: if the phone is unreachable, grey out and show a Reconnect
   button instead of a dead tab. A service worker keeps the page around so
   Brave/Chrome tab restore after the computer sleeps does not replace LanText
-  with the browser’s HTTP 502 screen.
+  with the browser’s HTTP 502 screen. The overlay waits 20 seconds so a brief
+  WebSocket drop does not interrupt typing. The events socket no longer uses
+  NanoHTTPD’s 5-second read timeout.
 
 ## [0.2.4] — 2026-08-30
 

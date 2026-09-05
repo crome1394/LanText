@@ -66,6 +66,8 @@ let reconnectAttempt = 0;
 let reconnecting = false;
 let wantEvents = false;
 let phoneReachable = true;
+let overlayTimer = null;
+const OVERLAY_GRACE_MS = 20000;
 
 function currentPalette() {
   return localStorage.getItem(THEME_PALETTE_KEY) || "fern";
@@ -152,7 +154,7 @@ async function api(path, options = {}) {
       cache: "no-store",
     });
   } catch (_) {
-    markDisconnected("Can't reach the phone.");
+    noteUnreachable("Can't reach the phone.");
     scheduleReconnect();
     throw new Error("Can't reach the phone");
   }
@@ -164,7 +166,7 @@ async function api(path, options = {}) {
     throw new Error("unpaired");
   }
   if (res.status === 502 || res.status === 503 || res.status === 504) {
-    markDisconnected("Can't reach the phone.");
+    noteUnreachable("Can't reach the phone.");
     scheduleReconnect();
     throw new Error("Can't reach the phone");
   }
@@ -199,14 +201,30 @@ function restoreInboxSnapshot() {
   } catch (_) {}
 }
 
-function markDisconnected(detail) {
-  phoneReachable = false;
+function showDisconnectOverlay(detail) {
   document.body.classList.add("disconnected");
   disconnectOverlay.hidden = false;
   connLabel.textContent = reconnecting ? "Reconnecting…" : "Offline";
   if (detail) disconnectStatus.textContent = detail;
   else if (!disconnectStatus.textContent) {
     disconnectStatus.textContent = "The phone did not answer. It may be off the Wi-Fi, or this computer just woke.";
+  }
+}
+
+function noteUnreachable(detail, { showNow = false } = {}) {
+  if (phoneReachable) {
+    phoneReachable = false;
+    connLabel.textContent = "Reconnecting…";
+  }
+  if (showNow || disconnectOverlay.hidden === false) {
+    showDisconnectOverlay(detail);
+    return;
+  }
+  if (overlayTimer == null) {
+    overlayTimer = setTimeout(() => {
+      overlayTimer = null;
+      if (!phoneReachable) showDisconnectOverlay(detail);
+    }, OVERLAY_GRACE_MS);
   }
 }
 
@@ -218,14 +236,16 @@ function markLive() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  if (overlayTimer != null) {
+    clearTimeout(overlayTimer);
+    overlayTimer = null;
+  }
   document.body.classList.remove("disconnected");
   disconnectOverlay.hidden = true;
   disconnectStatus.textContent = "";
   reconnectBtn.disabled = false;
   if (wantEvents && socket && socket.readyState === WebSocket.OPEN) {
     connLabel.textContent = "Live";
-  } else if (pairView.hidden === false) {
-    connLabel.textContent = "Connected";
   } else {
     connLabel.textContent = "Connected";
   }
@@ -233,11 +253,15 @@ function markLive() {
 
 function scheduleReconnect() {
   if (reconnecting || reconnectTimer != null) return;
-  const delay = Math.min(20000, 1500 * Math.pow(1.4, reconnectAttempt));
-  reconnectAttempt += 1;
+  const overlayUp = disconnectOverlay.hidden === false;
+  const delay = overlayUp
+    ? Math.min(20000, 1500 * Math.pow(1.4, reconnectAttempt++))
+    : 2000;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    reconnectToPhone();
+    if (disconnectOverlay.hidden === false) reconnectToPhone();
+    else if (wantEvents) connectEvents();
+    else reconnectToPhone();
   }, delay);
 }
 
@@ -281,7 +305,7 @@ async function reconnectToPhone() {
   } catch (_) {
     reconnecting = false;
     reconnectBtn.disabled = false;
-    markDisconnected("Still can't reach the phone.");
+    noteUnreachable("Still can't reach the phone.", { showNow: true });
     scheduleReconnect();
   }
 }
@@ -362,7 +386,7 @@ async function boot() {
     } else {
       showPair();
     }
-    markDisconnected("Can't reach the phone.");
+    noteUnreachable("Can't reach the phone.", { showNow: true });
     scheduleReconnect();
   }
 }
@@ -856,12 +880,8 @@ function connectEvents() {
   };
   socket.onclose = () => {
     if (gen !== eventGen) return;
-    markDisconnected("The live link to the phone closed.");
+    noteUnreachable("The live link to the phone closed.");
     scheduleReconnect();
-  };
-  socket.onerror = () => {
-    if (gen !== eventGen) return;
-    markDisconnected("The live link to the phone closed.");
   };
   socket.onmessage = (ev) => {
     let payload = {};
@@ -1053,13 +1073,20 @@ reconnectBtn.addEventListener("click", () => {
   }
   reconnectToPhone();
 });
-window.addEventListener("online", () => reconnectToPhone());
-window.addEventListener("offline", () => markDisconnected("This computer is offline."));
+window.addEventListener("online", () => {
+  if (disconnectOverlay.hidden === false) reconnectToPhone();
+  else if (wantEvents) connectEvents();
+});
+window.addEventListener("offline", () => {
+  noteUnreachable("This computer is offline.");
+});
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !phoneReachable) reconnectToPhone();
+  if (document.visibilityState === "visible" && disconnectOverlay.hidden === false) {
+    reconnectToPhone();
+  }
 });
 window.addEventListener("pageshow", (e) => {
-  if (e.persisted) reconnectToPhone();
+  if (e.persisted && disconnectOverlay.hidden === false) reconnectToPhone();
 });
 
 boot();

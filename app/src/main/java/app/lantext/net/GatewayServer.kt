@@ -49,7 +49,10 @@ class GatewayServer(
         ssl.init(kmf.keyManagers, null, SecureRandom())
         val server = LanHttp(bindAddress, listenPort)
         server.makeSecure(ssl.serverSocketFactory, null)
-        server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+        // 0 = no read timeout. The events WebSocket sits idle until a text
+        // arrives; NanoHTTPD's default 5s timeout closed it on a timer and
+        // made the browser reconnect-loop.
+        server.start(0, false)
         http = server
     }
 
