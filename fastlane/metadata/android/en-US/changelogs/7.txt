@@ -1,0 +1,6 @@
+Web inbox polish.
+
+• Emoji shortcuts (:lol then Tab), pin threads, Copy Number, Details, PDF
+• GIF search and voice notes are experimental; turn them off in Settings
+• Pairing and emoji send no longer fail silently
+• Widget Turn on/off button is pill-shaped

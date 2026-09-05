@@ -93,9 +93,9 @@ Hard rules (from F-Droid norms and the Point Forecast review):
 8. One clean tagged release you are happy with. Do not bump versions
    mid-review unless a maintainer asks.
 
-The draft currently lists **0.2.4** (`versionCode` 6), commit
-`cec8a9a26f48f0a42d84274f68aa20779ec20e23`. If you tag a newer release
-before the MR, update those fields first.
+The draft currently lists **0.2.5** (`versionCode` 7). After tagging,
+set `Builds.commit` to `git rev-parse v0.2.5^{}`. If you tag a newer
+release before the MR, update those fields first.
 
 F-Droid clones **this GitHub repository**. You do not move the project to
 GitLab; GitLab is only where the packaging recipe is reviewed.

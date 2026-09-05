@@ -10,25 +10,26 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-09-05
+
+Sideload build for testers.
+
 ### Added
 
-- Emoji picker on the web composer (thread and new message). Type a
-  Google Meet-style shortcut such as `:lol` and press Tab or Enter to
-  insert without clicking. Hover an emoji to see its command.
+- Emoji picker on the web composer. Type a Meet-style shortcut such as
+  `:lol` and press Tab or Enter to insert. Hover an emoji to see its
+  command.
+- Settings on the phone: GIF search and voice notes are experimental and
+  can be turned off. The computer inbox hides those controls immediately.
+- Pin a conversation from the thread header or by right-clicking it in
+  the list. Pinned threads stay at the top.
+- Copy Number, Details (everyone in the thread), and Download Thread (PDF
+  with dates and times). The contact photo opens Details.
 - Choosing a web appearance updates the home-screen widget colors.
-- Desktop notification permission is requested when the inbox loads; the
-  enable banner remains if the browser still needs a click.
-- Click a picture in a thread to expand it to fill the tab; click or Esc to
-  close.
-- Download thread as a PDF (dates and times on every message).
-- Record a voice note in the browser and send it as MMS AMR (carrier
-  picture-message rules, not RCS).
-- GIF picker (search + tap) sends a small GIF as MMS. Paste or attach a
-  `.gif` also works. Tenor’s third-party API is gone, so search uses
-  Openverse / Wikimedia files small enough for MMS. Hover a result to
-  preview the animation in a popup.
-- Copy the thread’s phone number(s), and a Details view of everyone in
-  a 1:1 or group thread (phones, emails, org).
+- Desktop notification permission is requested when the inbox loads.
+- Click a picture in a thread to expand it; click or Esc to close.
+- GIF search (Openverse / Wikimedia, small enough for MMS) and browser
+  voice notes sent as MMS. Paste or attach a `.gif` also works.
 
 ### Fixed
 
@@ -53,6 +54,8 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
   with the browser’s HTTP 502 screen. The overlay waits 20 seconds so a brief
   WebSocket drop does not interrupt typing. The events socket no longer uses
   NanoHTTPD’s 5-second read timeout.
+- Emoji typed in the computer inbox (including `:lol`) is sent as Unicode
+  instead of four replacement characters.
 
 ### Changed
 
@@ -62,6 +65,8 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
   Wi-Fi re-evaluation skips RSSI-only callbacks, and the known-SSID list is
   not rewritten on every sighting. Content-Security-Policy `connect-src` is
   `'self'` only.
+- Home-screen widget Turn on / Turn off control uses the same pill shape
+  as other buttons.
 
 ## [0.2.4] — 2026-08-30
 
@@ -172,6 +177,7 @@ HTTPS inbox on Wi-Fi you allow, without becoming the default SMS app.
 - F-Droid Fastlane metadata and project documentation
 
 [Unreleased]: #unreleased
+[0.2.5]: #025--2026-09-05
 [0.2.4]: #024--2026-08-30
 [0.2.3]: #023--2026-08-30
 [0.2.2]: #022--2026-08-30
