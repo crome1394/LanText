@@ -21,6 +21,11 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 - Click a picture in a thread to expand it to fill the tab; click or Esc to
   close.
 - Download thread as a PDF (dates and times on every message).
+- Record a voice note in the browser and send it as MMS AMR (carrier
+  picture-message rules, not RCS).
+- GIF picker (search + tap) sends a small GIF as MMS. Paste or attach a
+  `.gif` also works. Tenor’s third-party API is gone, so search uses
+  Openverse / Wikimedia files small enough for MMS.
 
 ### Fixed
 

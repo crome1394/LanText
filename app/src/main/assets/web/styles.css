@@ -471,6 +471,40 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
   color: var(--muted);
   font-family: ui-monospace, monospace;
 }
+.gif-panel {
+  margin: 6px 0 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  max-height: 280px;
+  overflow: auto;
+}
+.gif-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.gif-grid button {
+  border: 0;
+  padding: 0;
+  background: var(--incoming);
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 1;
+}
+.gif-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+#voice-btn.recording {
+  background: var(--danger);
+  color: #fff;
+}
+#pending-preview audio, #new-pending-preview audio { width: 100%; }
 #lightbox {
   position: fixed;
   inset: 0;

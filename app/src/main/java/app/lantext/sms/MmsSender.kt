@@ -32,6 +32,33 @@ import java.util.concurrent.atomic.AtomicInteger
 object MmsSender {
     private const val TAG = "LanText.Mms"
     data class ImagePayload(val bytes: ByteArray, val mime: String)
+    data class Prepared(
+        val bytes: ByteArray,
+        val contentType: String,
+        val fileName: String,
+        val smilTag: String,
+    )
+
+    fun prepare(bytes: ByteArray, mime: String): Prepared {
+        val kind = mime.lowercase()
+        return when {
+            kind.contains("gif") -> {
+                require(bytes.size <= GifSearch.MAX_BYTES) {
+                    "GIF is too large for MMS (carriers cap around 300 KB)"
+                }
+                require(bytes.size >= 6 && bytes[0] == 'G'.code.toByte()) { "Not a GIF" }
+                Prepared(bytes, ContentType.IMAGE_GIF, "image_0.gif", "img")
+            }
+            kind.startsWith("audio/") -> {
+                val amr = MmsAudio.toAmr(bytes)
+                Prepared(amr, ContentType.AUDIO_AMR, "audio_0.amr", "audio")
+            }
+            else -> {
+                val img = resizeIfNeeded(bytes, mime)
+                Prepared(img.bytes, ContentType.IMAGE_JPEG, "image_0.jpg", "img")
+            }
+        }
+    }
 
     fun resizeIfNeeded(bytes: ByteArray, mime: String, maxBytes: Int = 200_000, maxEdge: Int = 1024): ImagePayload {
         val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -69,6 +96,7 @@ object MmsSender {
         mime: String,
         subscriptionId: Int,
     ) {
+        val media = prepare(image, mime)
         val req = SendReq()
         req.prepareFromAddress(context, "", subscriptionId)
         for (to in recipients) {
@@ -76,13 +104,13 @@ object MmsSender {
         }
         req.setDate(System.currentTimeMillis() / 1000)
         val body = PduBody()
-        val imagePart = PduPart()
-        imagePart.setContentType(ContentType.IMAGE_JPEG.toByteArray())
-        imagePart.setContentLocation("image_0.jpg".toByteArray())
-        imagePart.setContentId("image".toByteArray())
-        imagePart.setName("image_0.jpg".toByteArray())
-        imagePart.setData(image)
-        body.addPart(imagePart)
+        val mediaPart = PduPart()
+        mediaPart.setContentType(media.contentType.toByteArray())
+        mediaPart.setContentLocation(media.fileName.toByteArray())
+        mediaPart.setContentId("media".toByteArray())
+        mediaPart.setName(media.fileName.toByteArray())
+        mediaPart.setData(media.bytes)
+        body.addPart(mediaPart)
         if (text.isNotBlank()) {
             val textPart = PduPart()
             textPart.setCharset(CharacterSets.UTF_8)
@@ -97,10 +125,10 @@ object MmsSender {
         smilPart.setContentId("smil".toByteArray())
         smilPart.setContentLocation("smil.xml".toByteArray())
         smilPart.setContentType(ContentType.APP_SMIL.toByteArray())
-        smilPart.setData(smilXml(text.isNotBlank()).toByteArray(Charsets.UTF_8))
+        smilPart.setData(smilXml(text.isNotBlank(), media).toByteArray(Charsets.UTF_8))
         body.addPart(0, smilPart)
         req.setBody(body)
-        req.setMessageSize(image.size.toLong() + text.length)
+        req.setMessageSize(media.bytes.size.toLong() + text.length)
         req.setMessageClass(PduHeaders.MESSAGE_CLASS_PERSONAL_STR.toByteArray())
         req.setExpiry(7 * 24 * 60 * 60)
         try {
@@ -111,7 +139,7 @@ object MmsSender {
         }
 
         val pdu = PduComposer(context, req).make()
-            ?: throw IllegalStateException("Could not build the picture message")
+            ?: throw IllegalStateException("Could not build the MMS")
         val fileName = "send." + UUID.randomUUID() + ".dat"
         File(context.cacheDir, fileName).writeBytes(pdu)
         val contentUri = Uri.Builder()
@@ -144,7 +172,7 @@ object MmsSender {
         val code = waiter.code.get()
         Log.i(TAG, "mms finished=$finished code=$code")
         if (!finished) {
-            throw IllegalStateException("The picture is still sending. If Fossify says it failed, turn on mobile data and retry there.")
+            throw IllegalStateException("The MMS is still sending. If Fossify says it failed, turn on mobile data and retry there.")
         }
         if (code != Activity.RESULT_OK) {
             throw IllegalStateException(mmsErrorMessage(code))
@@ -154,25 +182,27 @@ object MmsSender {
     private fun mmsErrorMessage(code: Int): String = when (code) {
         SmsManager.MMS_ERROR_NO_DATA_NETWORK,
         SmsManager.MMS_ERROR_DATA_DISABLED,
-        -> "Picture messages need mobile data, even on Wi-Fi. Turn mobile data on and try again."
+        -> "MMS needs mobile data, even on Wi-Fi. Turn mobile data on and try again."
         SmsManager.MMS_ERROR_INVALID_APN,
         SmsManager.MMS_ERROR_CONFIGURATION_ERROR,
         SmsManager.MMS_ERROR_UNABLE_CONNECT_MMS,
         SmsManager.MMS_ERROR_HTTP_FAILURE,
-        -> "AT&T did not accept the picture (MMS). Try a smaller image, or tap retry in Fossify Messages."
-        SmsManager.MMS_ERROR_IO_ERROR -> "Could not send the picture (the phone could not read it). Try again."
-        else -> "Could not send the picture (error $code). You can tap retry in Fossify Messages."
+        -> "The carrier did not accept the MMS. Try a smaller GIF or a shorter voice note, or tap retry in Fossify Messages."
+        SmsManager.MMS_ERROR_IO_ERROR -> "Could not send the MMS (the phone could not read it). Try again."
+        else -> "Could not send the MMS (error $code). You can tap retry in Fossify Messages."
     }
 
-    private fun smilXml(hasText: Boolean): String {
+    private fun smilXml(hasText: Boolean, media: Prepared): String {
         val textRegion = if (hasText) """<region id="Text" top="70%" height="30%" fit="scroll"/>""" else ""
         val textPar = if (hasText) """<text src="text_0.txt" region="Text"/>""" else ""
+        val mediaTag = """<${media.smilTag} src="${media.fileName}" region="Image"/>"""
+        val dur = if (media.smilTag == "audio") "45000ms" else "5000ms"
         return """<smil><head><layout>
 <root-layout width="320px" height="480px"/>
 <region id="Image" top="0" left="0" height="${if (hasText) "70%" else "100%"}" fit="meet"/>
 $textRegion
-</layout></head><body><par dur="5000ms">
-<img src="image_0.jpg" region="Image"/>$textPar
+</layout></head><body><par dur="$dur">
+$mediaTag$textPar
 </par></body></smil>"""
     }
 }

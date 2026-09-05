@@ -56,6 +56,17 @@ data class SendRequest(
     val subscriptionId: Int? = null,
     val imageBase64: String? = null,
     val imageMime: String? = null,
+    val mediaUrl: String? = null,
+)
+
+@Serializable
+data class GifHit(
+    val id: String,
+    val title: String,
+    val url: String,
+    val width: Int,
+    val height: Int,
+    val bytes: Int,
 )
 
 @Serializable

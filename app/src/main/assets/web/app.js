@@ -51,6 +51,12 @@ const reconnectBtn = document.getElementById("reconnect-btn");
 const emojiPanel = document.getElementById("emoji-panel");
 const emojiBtn = document.getElementById("emoji-btn");
 const pdfBtn = document.getElementById("pdf-btn");
+const gifBtn = document.getElementById("gif-btn");
+const gifPanel = document.getElementById("gif-panel");
+const gifSearch = document.getElementById("gif-search");
+const gifGrid = document.getElementById("gif-grid");
+const gifStatus = document.getElementById("gif-status");
+const voiceBtn = document.getElementById("voice-btn");
 const EMOJI = [
   { glyph: "😂", names: ["lol", "joy", "laugh"] },
   { glyph: "🤣", names: ["rofl", "rolling"] },
@@ -115,6 +121,9 @@ let conversations = [];
 let selectedId = null;
 let pendingImage = null;
 let pendingNewImage = null;
+let pendingGifUrl = null;
+let pendingNewGifUrl = null;
+let voiceRec = null;
 let selectedContact = null;
 let selectedExistingContact = null;
 let contactSaveMode = "new";
@@ -412,6 +421,7 @@ function openNewModal() {
 function closeNewModal() {
   newModal.hidden = true;
   hideEmojiPanel();
+  if (gifPanel) gifPanel.hidden = true;
 }
 
 function openHelp() { helpModal.hidden = false; }
@@ -657,6 +667,8 @@ function renderMessages(msgs) {
     for (const att of m.attachments || []) {
       if ((att.mimeType || "").startsWith("image/")) {
         html += `<img alt="" src="${escapeHtml(att.url)}" />`;
+      } else if ((att.mimeType || "").startsWith("audio/")) {
+        html += `<audio controls preload="none" src="${escapeHtml(att.url)}"></audio>`;
       }
     }
     html += linkify(m.body || "");
@@ -753,6 +765,170 @@ newModal.addEventListener("drop", (e) => {
 });
 
 document.getElementById("attach-btn").addEventListener("click", () => fileInput.click());
+gifBtn.addEventListener("click", () => {
+  hideEmojiPanel();
+  gifPanel.hidden = !gifPanel.hidden;
+  if (!gifPanel.hidden) {
+    gifSearch.focus();
+    if (!gifGrid.childElementCount) searchGifs("reaction");
+  }
+});
+document.getElementById("new-gif-btn").addEventListener("click", () => {
+  hideEmojiPanel();
+  const form = document.getElementById("new-form");
+  form.insertBefore(gifPanel, form.querySelector(".new-actions"));
+  gifPanel.hidden = false;
+  gifSearch.focus();
+  if (!gifGrid.childElementCount) searchGifs("reaction");
+});
+let gifTimer = null;
+gifSearch.addEventListener("input", () => {
+  clearTimeout(gifTimer);
+  gifTimer = setTimeout(() => searchGifs(gifSearch.value.trim() || "reaction"), 300);
+});
+async function searchGifs(q) {
+  gifStatus.hidden = false;
+  gifStatus.textContent = "Searching…";
+  gifGrid.innerHTML = "";
+  try {
+    const hits = await api("/api/v1/gifs?q=" + encodeURIComponent(q || "reaction"));
+    if (!hits.length) {
+      gifStatus.textContent = "No GIFs small enough for MMS. Try another word, or attach a .gif file.";
+      return;
+    }
+    gifStatus.hidden = true;
+    for (const hit of hits) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.title = hit.title || "";
+      btn.innerHTML = `<img alt="" src="${escapeHtml(hit.url)}" />`;
+      btn.addEventListener("click", () => pickGif(hit));
+      gifGrid.appendChild(btn);
+    }
+  } catch (err) {
+    gifStatus.textContent = err.message || "Could not search GIFs";
+  }
+}
+function pickGif(hit) {
+  const fileish = { name: (hit.title || "gif") + ".gif", type: "image/gif" };
+  if (!newModal.hidden) {
+    pendingNewGifUrl = hit.url;
+    pendingNewImage = null;
+    renderPreview(newPendingPreview, fileish, () => {
+      pendingNewGifUrl = null;
+      newPendingPreview.hidden = true;
+      newPendingPreview.innerHTML = "";
+    }, hit.url);
+  } else {
+    pendingGifUrl = hit.url;
+    pendingImage = null;
+    renderPreview(pendingPreview, fileish, () => {
+      pendingGifUrl = null;
+      pendingPreview.hidden = true;
+      pendingPreview.innerHTML = "";
+    }, hit.url);
+  }
+  gifPanel.hidden = true;
+}
+voiceBtn.addEventListener("click", () => toggleVoice(false));
+document.getElementById("new-voice-btn").addEventListener("click", () => toggleVoice(true));
+async function toggleVoice(forNew) {
+  if (voiceRec) {
+    await voiceRec.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert("This browser cannot record audio.");
+    return;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  voiceBtn.classList.add("recording");
+  voiceBtn.title = "Stop recording";
+  const chunks = [];
+  const ctx = new AudioContext();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const rate = ctx.sampleRate;
+  proc.onaudioprocess = (ev) => {
+    chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+  };
+  const mute = ctx.createGain();
+  mute.gain.value = 0;
+  src.connect(proc);
+  proc.connect(mute);
+  mute.connect(ctx.destination);
+  const started = Date.now();
+  const limit = setTimeout(() => voiceRec && voiceRec.stop(), 45000);
+  voiceRec = {
+    stop: async () => {
+      clearTimeout(limit);
+      voiceRec = null;
+      proc.disconnect();
+      src.disconnect();
+      stream.getTracks().forEach((t) => t.stop());
+      await ctx.close();
+      voiceBtn.classList.remove("recording");
+      voiceBtn.title = "Record a voice message";
+      const samples = mergeFloat32(chunks);
+      if (samples.length < rate / 5) return;
+      const wav = encodeWav(downsample(samples, rate, 8000), 8000);
+      const file = new File([wav], "voice.wav", { type: "audio/wav" });
+      if (forNew) setPendingNewImage(file);
+      else setPendingImage(file);
+    },
+  };
+}
+function mergeFloat32(chunks) {
+  let n = 0;
+  for (const c of chunks) n += c.length;
+  const out = new Float32Array(n);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+function downsample(input, fromRate, toRate) {
+  if (fromRate === toRate) {
+    const out = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return out;
+  }
+  const outLen = Math.max(1, Math.floor(input.length * toRate / fromRate));
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * fromRate / toRate;
+    const i0 = Math.min(input.length - 1, Math.floor(src));
+    const s = Math.max(-1, Math.min(1, input[i0]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+function encodeWav(samples, sampleRate) {
+  const n = samples.length * 2;
+  const buf = new ArrayBuffer(44 + n);
+  const v = new DataView(buf);
+  const w = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  w(0, "RIFF");
+  v.setUint32(4, 36 + n, true);
+  w(8, "WAVE");
+  w(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  w(36, "data");
+  v.setUint32(40, n, true);
+  for (let i = 0; i < samples.length; i++) v.setInt16(44 + i * 2, samples[i], true);
+  return buf;
+}
 let emojiMode = "";
 let emojiSel = 0;
 let emojiHits = [];
@@ -946,10 +1122,16 @@ newFileInput.addEventListener("change", () => {
   if (newFileInput.files[0]) setPendingNewImage(newFileInput.files[0]);
 });
 
-function renderPreview(container, file, onClear) {
+function renderPreview(container, file, onClear, previewUrl) {
   container.hidden = false;
-  container.innerHTML = `<img alt="attachment" /><span class="muted">${escapeHtml(file.name || "image")}</span><button type="button">Remove</button>`;
-  container.querySelector("img").src = URL.createObjectURL(file);
+  const audio = (file.type || "").startsWith("audio/");
+  if (audio) {
+    container.innerHTML = `<audio controls></audio><span class="muted">Voice message</span><button type="button">Remove</button>`;
+    container.querySelector("audio").src = previewUrl || URL.createObjectURL(file);
+  } else {
+    container.innerHTML = `<img alt="attachment" /><span class="muted">${escapeHtml(file.name || "image")}</span><button type="button">Remove</button>`;
+    container.querySelector("img").src = previewUrl || URL.createObjectURL(file);
+  }
   container.querySelector("button").onclick = onClear;
 }
 
@@ -1009,17 +1191,19 @@ composeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selectedId || sending) return;
   const body = composeText.value.trim();
-  if (!body && !pendingImage) return;
+  if (!body && !pendingImage && !pendingGifUrl) return;
   const convo = conversations.find((c) => c.id === selectedId);
   sending = true;
   const sendBtn = document.getElementById("send-btn");
   const previousLabel = sendBtn.textContent;
-  sendBtn.textContent = pendingImage ? "Sending picture…" : "Sending…";
+  sendBtn.textContent = pendingGifUrl ? "Sending GIF…" : pendingImage ? ((pendingImage.type || "").startsWith("audio/") ? "Sending voice…" : "Sending picture…") : "Sending…";
   try {
     const dest = (convo?.recipients || []).filter(Boolean);
     const recipients = dest.length ? dest : [convo?.address].filter(Boolean);
     const payload = { body, recipients };
-    if (pendingImage) {
+    if (pendingGifUrl) {
+      payload.mediaUrl = pendingGifUrl;
+    } else if (pendingImage) {
       payload.imageBase64 = await fileToBase64(pendingImage);
       payload.imageMime = pendingImage.type || "image/jpeg";
     }
@@ -1029,6 +1213,7 @@ composeForm.addEventListener("submit", async (e) => {
       body: JSON.stringify(payload),
     });
     pendingImage = null;
+    pendingGifUrl = null;
     pendingPreview.hidden = true;
     pendingPreview.innerHTML = "";
     composeText.value = "";
@@ -1056,7 +1241,8 @@ document.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === "Escape") {
     if (!lightbox.hidden) { closeLightbox(); e.preventDefault(); return; }
-    if (emojiPanel && !emojiPanel.hidden) { emojiPanel.hidden = true; e.preventDefault(); return; }
+    if (emojiPanel && !emojiPanel.hidden) { hideEmojiPanel(); e.preventDefault(); return; }
+    if (gifPanel && !gifPanel.hidden) { gifPanel.hidden = true; e.preventDefault(); return; }
     if (!helpModal.hidden) { closeHelp(); e.preventDefault(); return; }
     if (!themeModal.hidden) { closeTheme(); e.preventDefault(); return; }
     if (!contactModal.hidden) { closeContactModal(); e.preventDefault(); return; }
@@ -1128,10 +1314,12 @@ newForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = document.getElementById("new-body").value.trim();
   const number = selectedContact?.number || contactSearch.value.trim();
-  if (!number || (!body && !pendingNewImage)) return;
+  if (!number || (!body && !pendingNewImage && !pendingNewGifUrl)) return;
   try {
     const payload = { recipients: [number], body };
-    if (pendingNewImage) {
+    if (pendingNewGifUrl) {
+      payload.mediaUrl = pendingNewGifUrl;
+    } else if (pendingNewImage) {
       payload.imageBase64 = await fileToBase64(pendingNewImage);
       payload.imageMime = pendingNewImage.type || "image/jpeg";
     }
@@ -1141,6 +1329,7 @@ newForm.addEventListener("submit", async (e) => {
       body: JSON.stringify(payload),
     });
     pendingNewImage = null;
+    pendingNewGifUrl = null;
     closeNewModal();
     document.getElementById("new-body").value = "";
     await loadInbox();

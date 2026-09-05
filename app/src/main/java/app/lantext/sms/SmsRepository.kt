@@ -230,17 +230,21 @@ class SmsRepository(
         val dest = recipients.map { PhoneNumbers.normalize(it, region).ifBlank { it.trim() } }
             .filter { it.isNotBlank() }
         require(dest.isNotEmpty()) { "No recipients" }
-        require(imageBytes != null && imageBytes.isNotEmpty()) { "MMS requires an image in this version" }
+        require(imageBytes != null && imageBytes.isNotEmpty()) { "MMS requires an attachment" }
         val mime = imageMime ?: "image/jpeg"
-        val resized = MmsSender.resizeIfNeeded(imageBytes, mime)
         val subId = subscriptionId ?: android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
-        MmsSender.send(context, smsManager(subscriptionId), dest, body, resized.bytes, resized.mime, subId)
+        MmsSender.send(context, smsManager(subscriptionId), dest, body, imageBytes, mime, subId)
+        val label = when {
+            mime.contains("gif", true) -> "GIF"
+            mime.startsWith("audio/") -> "Voice message"
+            else -> "Picture"
+        }
         MessageDto(
             id = "local-mms-${System.currentTimeMillis()}",
             threadId = "",
             address = dest.joinToString(", "),
             displayName = contacts.displayName(dest.first()),
-            body = body.ifBlank { "Picture" },
+            body = body.ifBlank { label },
             timestamp = System.currentTimeMillis(),
             incoming = false,
             type = "mms",
@@ -402,7 +406,11 @@ class SmsRepository(
                 val box = cursor.getInt(iBox)
                 val parts = mmsParts(mmsId)
                 val text = parts.firstOrNull { it.mimeType.startsWith("text/") }?.text.orEmpty()
-                val attachments = parts.filter { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") }
+                val attachments = parts.filter {
+                    it.mimeType.startsWith("image/") ||
+                        it.mimeType.startsWith("video/") ||
+                        it.mimeType.startsWith("audio/")
+                }
                     .map {
                         AttachmentDto(
                             id = it.id,

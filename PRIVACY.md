@@ -18,6 +18,9 @@ While web access is on **and** you are connected to a Wi-Fi name you allowed:
   contact.
 - Outgoing SMS and MMS go through your carrier, the same way they would from
   any messenger on the phone.
+- GIF search uses Openverse (Creative Commons) from the phone, then the
+  chosen GIF is sent as MMS. Voice notes are recorded in the browser and
+  sent as AMR over MMS. Neither uses a LanText cloud.
 
 Nothing is uploaded to a LanText server. There is no LanText server.
 

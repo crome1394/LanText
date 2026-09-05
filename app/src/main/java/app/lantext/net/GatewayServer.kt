@@ -8,6 +8,7 @@ import app.lantext.sms.AddPhoneRequest
 import app.lantext.sms.AppearanceRequest
 import app.lantext.sms.ContactsRepository
 import app.lantext.sms.CreateContactRequest
+import app.lantext.sms.GifSearch
 import app.lantext.sms.SendRequest
 import app.lantext.sms.SmsRepository
 import app.lantext.sms.ThreadPdf
@@ -242,6 +243,8 @@ class GatewayServer(
                         app.lantext.LanTextApp.instance.settings.setAppearance(req.palette, req.mode)
                         json(Response.Status.OK, mapOf("ok" to true))
                     }
+                    method == Method.GET && uri == "/api/v1/gifs" ->
+                        jsonRaw(json.encodeToString(GifSearch.search(q("q"))))
                     method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/pdf")) -> {
                         val id = uri.split("/")[4]
                         val convo = sms.conversations().firstOrNull { it.id == id }
@@ -266,13 +269,19 @@ class GatewayServer(
             req: SendRequest,
             recipients: List<String>,
         ): app.lantext.sms.MessageDto {
+            val url = req.mediaUrl?.takeIf { it.isNotBlank() }
             val image = req.imageBase64?.takeIf { it.isNotBlank() }
-            return if (image != null) {
-                val bytes = android.util.Base64.decode(image, android.util.Base64.DEFAULT)
-                require(bytes.isNotEmpty()) { "Picture data was empty" }
-                sms.sendMms(recipients, req.body, bytes, req.imageMime, req.subscriptionId)
-            } else {
-                sms.sendSms(recipients, req.body, req.subscriptionId)
+            return when {
+                url != null -> {
+                    val bytes = GifSearch.download(url)
+                    sms.sendMms(recipients, req.body, bytes, "image/gif", req.subscriptionId)
+                }
+                image != null -> {
+                    val bytes = android.util.Base64.decode(image, android.util.Base64.DEFAULT)
+                    require(bytes.isNotEmpty()) { "Attachment was empty" }
+                    sms.sendMms(recipients, req.body, bytes, req.imageMime, req.subscriptionId)
+                }
+                else -> sms.sendSms(recipients, req.body, req.subscriptionId)
             }
         }
 
@@ -339,9 +348,10 @@ class GatewayServer(
             res.addHeader("Referrer-Policy", "no-referrer")
             res.addHeader(
                 "Content-Security-Policy",
-                "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; " +
-                    "style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; " +
-                    "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                "default-src 'self'; img-src 'self' data: blob: https://upload.wikimedia.org; " +
+                    "media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; " +
+                    "worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; " +
+                    "base-uri 'self'; form-action 'self'",
             )
             res.addHeader("Cache-Control", if (cacheable) "no-cache" else "no-store")
         }
