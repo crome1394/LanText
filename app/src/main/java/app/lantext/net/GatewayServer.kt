@@ -7,8 +7,10 @@ import app.lantext.data.PairingManager
 import app.lantext.sms.AddPhoneRequest
 import app.lantext.sms.AppearanceRequest
 import app.lantext.sms.ContactsRepository
+import app.lantext.sms.ConversationDto
 import app.lantext.sms.CreateContactRequest
 import app.lantext.sms.GifSearch
+import app.lantext.sms.PinRequest
 import app.lantext.sms.SendRequest
 import app.lantext.sms.SmsRepository
 import app.lantext.sms.ThreadPdf
@@ -102,7 +104,14 @@ class GatewayServer(
             val method = session.method
             fun q(name: String) = session.parameters[name]?.firstOrNull().orEmpty()
 
-            if (method == Method.GET && (uri == "/" || uri.isEmpty())) {
+            if ((method == Method.GET || method == Method.POST) && (uri == "/" || uri.isEmpty())) {
+                if (method == Method.POST) {
+                    try {
+                        preferUtf8ContentType(session)
+                        session.parseBody(HashMap())
+                    } catch (_: Exception) {
+                    }
+                }
                 return asset("web/index.html", "text/html")
             }
             if (method == Method.GET && uri == "/favicon.ico") {
@@ -110,12 +119,15 @@ class GatewayServer(
             }
 
             if (method == Method.GET && uri == "/api/v1/meta") {
+                val settings = currentSettings()
                 return json(
                     Response.Status.OK,
                     mapOf(
                         "fingerprint" to certs.fingerprintSha256,
                         "listening" to true,
                         "paired" to (deviceFor(session) != null),
+                        "gifEnabled" to settings.gifEnabled,
+                        "voiceEnabled" to settings.voiceEnabled,
                     ),
                 )
             }
@@ -181,14 +193,23 @@ class GatewayServer(
             fun q(name: String) = session.parameters[name]?.firstOrNull().orEmpty()
             return kotlinx.coroutines.runBlocking {
                 when {
-                    method == Method.GET && uri == "/api/v1/session" ->
-                        json(Response.Status.OK, mapOf("ok" to true))
+                    method == Method.GET && uri == "/api/v1/session" -> {
+                        val settings = currentSettings()
+                        json(
+                            Response.Status.OK,
+                            mapOf(
+                                "ok" to true,
+                                "gifEnabled" to settings.gifEnabled,
+                                "voiceEnabled" to settings.voiceEnabled,
+                            ),
+                        )
+                    }
                     method == Method.DELETE && uri == "/api/v1/session" -> {
                         deviceFor(session)?.let { pairing.revoke(it.id) }
                         json(Response.Status.OK, mapOf("ok" to true))
                     }
                     method == Method.GET && uri == "/api/v1/conversations" ->
-                        jsonRaw(json.encodeToString(sms.conversations()))
+                        jsonRaw(json.encodeToString(decorateConversations(sms.conversations())))
                     method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/messages")) -> {
                         val id = uri.split("/")[4]
                         val before = q("before").toLongOrNull()
@@ -198,6 +219,13 @@ class GatewayServer(
                     method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/read")) -> {
                         sms.markRead(uri.split("/")[4])
                         json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/pin")) -> {
+                        val id = uri.split("/")[4]
+                        val req = json.decodeFromString<PinRequest>(readBody(session))
+                        app.lantext.LanTextApp.instance.settings.setThreadPinned(id, req.pinned)
+                        sms.emitRefresh()
+                        json(Response.Status.OK, mapOf("ok" to true, "pinned" to req.pinned))
                     }
                     method == Method.POST && uri == "/api/v1/conversations" -> {
                         val req = json.decodeFromString<SendRequest>(readBody(session))
@@ -209,8 +237,13 @@ class GatewayServer(
                         val dest = req.recipients.ifEmpty { recipientsForThread(threadId) }
                         jsonRaw(json.encodeToString(sendOutgoing(req, dest)), 202)
                     }
-                    method == Method.GET && uri == "/api/v1/search" ->
-                        jsonRaw(json.encodeToString(sms.search(q("q"))))
+                    method == Method.GET && uri == "/api/v1/search" -> {
+                        val pinned = currentSettings().pinnedThreadIds
+                        val hits = sms.search(q("q")).map { hit ->
+                            hit.copy(conversation = hit.conversation.copy(pinned = hit.conversation.id in pinned))
+                        }
+                        jsonRaw(json.encodeToString(hits))
+                    }
                     method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/people")) -> {
                         val id = uri.split("/")[4]
                         contacts.refresh()
@@ -253,8 +286,13 @@ class GatewayServer(
                         app.lantext.LanTextApp.instance.settings.setAppearance(req.palette, req.mode)
                         json(Response.Status.OK, mapOf("ok" to true))
                     }
-                    method == Method.GET && uri == "/api/v1/gifs" ->
-                        jsonRaw(json.encodeToString(GifSearch.search(q("q"))))
+                    method == Method.GET && uri == "/api/v1/gifs" -> {
+                        if (!currentSettings().gifEnabled) {
+                            json(Response.Status.FORBIDDEN, mapOf("error" to "GIF sending is turned off on the phone."))
+                        } else {
+                            jsonRaw(json.encodeToString(GifSearch.search(q("q"))))
+                        }
+                    }
                     method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/pdf")) -> {
                         val id = uri.split("/")[4]
                         val convo = sms.conversations().firstOrNull { it.id == id }
@@ -281,12 +319,21 @@ class GatewayServer(
         ): app.lantext.sms.MessageDto {
             val url = req.mediaUrl?.takeIf { it.isNotBlank() }
             val image = req.imageBase64?.takeIf { it.isNotBlank() }
+            val settings = currentSettings()
+            val mime = req.imageMime.orEmpty()
             return when {
                 url != null -> {
+                    require(settings.gifEnabled) { "GIF sending is turned off on the phone." }
                     val bytes = GifSearch.download(url)
                     sms.sendMms(recipients, req.body, bytes, "image/gif", req.subscriptionId)
                 }
                 image != null -> {
+                    if (mime.contains("gif", ignoreCase = true)) {
+                        require(settings.gifEnabled) { "GIF sending is turned off on the phone." }
+                    }
+                    if (mime.startsWith("audio/")) {
+                        require(settings.voiceEnabled) { "Voice messages are turned off on the phone." }
+                    }
                     val bytes = android.util.Base64.decode(image, android.util.Base64.DEFAULT)
                     require(bytes.isNotEmpty()) { "Attachment was empty" }
                     sms.sendMms(recipients, req.body, bytes, req.imageMime, req.subscriptionId)
@@ -332,14 +379,14 @@ class GatewayServer(
 
         private fun json(status: Response.IStatus, body: Map<String, Any?>): Response {
             val encoded = org.json.JSONObject(body).toString()
-            val res = newFixedLengthResponse(status, "application/json", encoded)
+            val res = newFixedLengthResponse(status, "application/json; charset=utf-8", encoded)
             secure(res)
             return res
         }
 
         private fun jsonRaw(encoded: String, code: Int = 200): Response {
             val st = Response.Status.lookup(code) ?: Response.Status.OK
-            val res = newFixedLengthResponse(st, "application/json", encoded)
+            val res = newFixedLengthResponse(st, "application/json; charset=utf-8", encoded)
             secure(res)
             return res
         }
@@ -366,7 +413,15 @@ class GatewayServer(
             res.addHeader("Cache-Control", if (cacheable) "no-cache" else "no-store")
         }
 
+        private fun preferUtf8ContentType(session: IHTTPSession) {
+            val headers = session.headers
+            val type = headers["content-type"]
+            if (type != null && type.contains("charset", ignoreCase = true)) return
+            headers["content-type"] = NanoHTTPD.ContentType(type).tryUTF8().contentTypeHeader
+        }
+
         private fun readBody(session: IHTTPSession): String {
+            preferUtf8ContentType(session)
             val files = HashMap<String, String>()
             session.parseBody(files)
             val len = session.headers["content-length"]?.toIntOrNull() ?: 0
@@ -377,6 +432,20 @@ class GatewayServer(
             val buf = ByteArray(len)
             session.inputStream.read(buf)
             return String(buf, Charsets.UTF_8)
+        }
+
+        private fun currentSettings() = kotlinx.coroutines.runBlocking {
+            app.lantext.LanTextApp.instance.settings.current()
+        }
+
+        private fun decorateConversations(list: List<ConversationDto>): List<ConversationDto> {
+            val pinned = currentSettings().pinnedThreadIds
+            return list
+                .map { it.copy(pinned = it.id in pinned) }
+                .sortedWith(
+                    compareByDescending<ConversationDto> { it.pinned }
+                        .thenByDescending { it.timestamp },
+                )
         }
 
         private fun readJson(session: IHTTPSession): Map<String, String> {
@@ -427,6 +496,20 @@ class GatewayServer(
                             ping(ByteArray(0))
                         } catch (_: Exception) {
                             break
+                        }
+                    }
+                }
+                launch {
+                    app.lantext.LanTextApp.instance.settings.settings.collect { s ->
+                        try {
+                            send(
+                                org.json.JSONObject()
+                                    .put("type", "settings")
+                                    .put("gifEnabled", s.gifEnabled)
+                                    .put("voiceEnabled", s.voiceEnabled)
+                                    .toString(),
+                            )
+                        } catch (_: Exception) {
                         }
                     }
                 }

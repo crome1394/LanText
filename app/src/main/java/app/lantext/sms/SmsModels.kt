@@ -15,6 +15,7 @@ data class ConversationDto(
     val recipients: List<String>,
     val avatarColor: String,
     val contactId: String? = null,
+    val pinned: Boolean = false,
 )
 
 @Serializable
@@ -109,4 +110,9 @@ data class AddPhoneRequest(
 data class AppearanceRequest(
     val palette: String = "fern",
     val mode: String = "auto",
+)
+
+@Serializable
+data class PinRequest(
+    val pinned: Boolean = true,
 )

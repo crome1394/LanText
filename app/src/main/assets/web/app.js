@@ -18,6 +18,7 @@ const PALETTES = [
 const pairView = document.getElementById("pair-view");
 const appView = document.getElementById("app-view");
 const pairForm = document.getElementById("pair-form");
+const pairBtn = document.getElementById("pair-btn");
 const pairStatus = document.getElementById("pair-status");
 const fpLine = document.getElementById("fp-line");
 const convoList = document.getElementById("convo-list");
@@ -138,6 +139,164 @@ let wantEvents = false;
 let phoneReachable = true;
 let overlayTimer = null;
 const OVERLAY_GRACE_MS = 20000;
+let pairingInFlight = false;
+let gifEnabled = true;
+let voiceEnabled = true;
+
+function setPairStatus(msg) {
+  if (pairStatus) pairStatus.textContent = msg || "";
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function pollPair(requestId) {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await fetch("/api/v1/pair/" + requestId, {
+        credentials: "include",
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "approved") return data.token;
+        if (data.status === "denied") return null;
+      }
+    } catch (_) {}
+    await sleep(1000);
+  }
+  return null;
+}
+
+async function startPair(e) {
+  if (e) e.preventDefault();
+  if (pairingInFlight) return;
+  const pinEl = document.getElementById("pin");
+  const pin = (pinEl && pinEl.value ? pinEl.value : "").trim();
+  if (!/^\d{8}$/.test(pin)) {
+    setPairStatus("Enter the 8-digit PIN from the LanText app.");
+    return;
+  }
+  pairingInFlight = true;
+  if (pairBtn) pairBtn.disabled = true;
+  setPairStatus("Waiting for approval on your phone…");
+  try {
+    const started = await fetch("/api/v1/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ pin, clientName: navigator.userAgent.slice(0, 60) }),
+      credentials: "include",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!started.ok) {
+      let err = "PIN rejected";
+      try { err = (await started.json()).error || err; } catch (_) {}
+      setPairStatus(
+        err === "expired"
+          ? "That PIN expired. Use the PIN currently shown in the app."
+          : err === "locked"
+            ? "Too many attempts. Wait a moment and try again."
+            : "PIN rejected. Check the PIN on the phone and try again.",
+      );
+      return;
+    }
+    const { requestId } = await started.json();
+    if (!requestId) {
+      setPairStatus("The phone did not start pairing. Try again with a fresh PIN.");
+      return;
+    }
+    const tokenFound = await pollPair(requestId);
+    if (!tokenFound) {
+      setPairStatus("Pairing was denied or expired. Approve on the phone, then try again.");
+      return;
+    }
+    token = tokenFound;
+    localStorage.setItem(TOKEN_KEY, token);
+    await enterApp();
+  } catch (err) {
+    const timedOut = err && (err.name === "TimeoutError" || err.name === "AbortError");
+    setPairStatus(timedOut
+      ? "The phone did not respond. Check Wi-Fi and try again."
+      : ((err && err.message) || "Could not reach the phone."));
+  } finally {
+    pairingInFlight = false;
+    if (pairBtn) pairBtn.disabled = false;
+  }
+}
+
+if (pairForm) pairForm.addEventListener("submit", startPair);
+
+function applyExperimental(src) {
+  if (!src) return;
+  if (typeof src.gifEnabled === "boolean") gifEnabled = src.gifEnabled;
+  if (typeof src.voiceEnabled === "boolean") voiceEnabled = src.voiceEnabled;
+  if (gifBtn) gifBtn.hidden = !gifEnabled;
+  const newGif = document.getElementById("new-gif-btn");
+  if (newGif) newGif.hidden = !gifEnabled;
+  if (voiceBtn) voiceBtn.hidden = !voiceEnabled;
+  const newVoice = document.getElementById("new-voice-btn");
+  if (newVoice) newVoice.hidden = !voiceEnabled;
+  if (!gifEnabled && gifPanel) gifPanel.hidden = true;
+  if (!gifEnabled) {
+    pendingGifUrl = null;
+    pendingNewGifUrl = null;
+  }
+  if (!voiceEnabled && voiceRec) voiceRec.stop();
+  if (!voiceEnabled) {
+    if (pendingImage && (pendingImage.type || "").startsWith("audio/")) {
+      pendingImage = null;
+      if (pendingPreview) { pendingPreview.hidden = true; pendingPreview.innerHTML = ""; }
+    }
+    if (pendingNewImage && (pendingNewImage.type || "").startsWith("audio/")) {
+      pendingNewImage = null;
+      if (newPendingPreview) { newPendingPreview.hidden = true; newPendingPreview.innerHTML = ""; }
+    }
+  }
+  const accept = [];
+  if (gifEnabled) {
+    accept.push("image/*", ".gif");
+  } else {
+    accept.push("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif");
+  }
+  if (voiceEnabled) accept.push("audio/*");
+  const acceptStr = accept.join(",");
+  if (fileInput) fileInput.accept = acceptStr;
+  if (newFileInput) newFileInput.accept = acceptStr;
+  const attach = document.getElementById("attach-btn");
+  if (attach) attach.title = gifEnabled ? "Attach a picture or GIF" : "Attach a picture";
+  if (composeText) {
+    composeText.placeholder = gifEnabled && voiceEnabled
+      ? "Message, GIF, or voice note"
+      : gifEnabled ? "Message or GIF"
+        : voiceEnabled ? "Message or voice note"
+          : "Message";
+  }
+  const hint = document.querySelector(".compose-hint");
+  if (hint) {
+    const extra = gifEnabled && voiceEnabled ? "GIF or 🎤 for MMS · "
+      : gifEnabled ? "GIF for MMS · "
+        : voiceEnabled ? "🎤 for MMS · "
+          : "";
+    hint.textContent = "Enter to send · :lol then Tab · " + extra + "Shift+Enter for a new line";
+  }
+}
+
+function isGifFile(file) {
+  return !!file && ((file.type || "") === "image/gif" || /\.gif$/i.test(file.name || ""));
+}
+function isAudioFile(file) {
+  return !!file && (file.type || "").startsWith("audio/");
+}
+function rejectDisabledMedia(file) {
+  if (isGifFile(file) && !gifEnabled) {
+    alert("GIF sending is turned off on the phone.");
+    return true;
+  }
+  if (isAudioFile(file) && !voiceEnabled) {
+    alert("Voice messages are turned off on the phone.");
+    return true;
+  }
+  return false;
+}
 
 function currentPalette() {
   return localStorage.getItem(THEME_PALETTE_KEY) || "fern";
@@ -163,7 +322,7 @@ let appearanceReady = false;
 function syncAppearance() {
   fetch("/api/v1/appearance", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: authHeaders({ "Content-Type": "application/json; charset=UTF-8" }),
     credentials: "include",
     body: JSON.stringify({ palette: currentPalette(), mode: currentMode() }),
   }).catch(() => {});
@@ -355,7 +514,8 @@ function scheduleReconnect() {
 
 async function enterApp() {
   showApp();
-  await api("/api/v1/session");
+  const session = await api("/api/v1/session");
+  applyExperimental(session);
   await loadInbox();
   wantEvents = true;
   connectEvents();
@@ -375,6 +535,7 @@ async function reconnectToPhone() {
     const res = await fetch("/api/v1/meta", { credentials: "include", cache: "no-store" });
     if (!res.ok) throw new Error("unreachable");
     const meta = await res.json();
+    applyExperimental(meta);
     if (token || meta.paired) {
       await enterApp();
       return;
@@ -469,6 +630,7 @@ async function boot() {
     });
     if (!res.ok) throw new Error("unreachable");
     const meta = await res.json();
+    applyExperimental(meta);
     if (meta.fingerprint) {
       fpLine.textContent = "Certificate fingerprint: " + meta.fingerprint.match(/.{1,4}/g).join(" ");
     }
@@ -512,67 +674,10 @@ async function refreshInbox(fullReload) {
   }
 }
 
-async function startPair(e) {
-  if (e) e.preventDefault();
-  const pin = document.getElementById("pin").value.trim();
-  if (!/^\d{8}$/.test(pin)) {
-    pairStatus.textContent = "Enter the 8-digit PIN from the LanText app.";
-    return;
-  }
-  pairStatus.textContent = "Waiting for approval on your phone…";
-  try {
-    const started = await fetch("/api/v1/pair", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin, clientName: navigator.userAgent.slice(0, 60) }),
-      credentials: "include",
-    });
-    if (!started.ok) {
-      let err = "PIN rejected";
-      try { err = (await started.json()).error || err; } catch (_) {}
-      pairStatus.textContent = err === "expired"
-        ? "That PIN expired. Use the PIN currently shown in the app."
-        : err === "locked"
-          ? "Too many attempts. Wait a moment and try again."
-          : "PIN rejected. Check the PIN on the phone and try again.";
-      return;
-    }
-    const { requestId } = await started.json();
-    const tokenFound = await pollPair(requestId);
-    if (!tokenFound) {
-      pairStatus.textContent = "Pairing was denied or expired. Approve on the phone, then try again.";
-      return;
-    }
-    token = tokenFound;
-    localStorage.setItem(TOKEN_KEY, token);
-    await enterApp();
-  } catch (err) {
-    pairStatus.textContent = err.message || "Could not reach the phone.";
-  }
-}
-if (pairForm) pairForm.addEventListener("submit", startPair);
-
-async function pollPair(requestId) {
-  for (let i = 0; i < 60; i++) {
-    const res = await fetch("/api/v1/pair/" + requestId, { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.status === "approved") return data.token;
-      if (data.status === "denied") return null;
-    } else if (res.status === 404) {
-      await sleep(1000);
-      continue;
-    }
-    await sleep(1000);
-  }
-  return null;
-}
-
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
 async function loadInbox(opts = {}) {
   const previous = conversations;
   conversations = await api("/api/v1/conversations");
+  sortConversations();
   if (opts.notify) notifyFromInbox(previous, conversations);
   updateTitle();
   renderConversations(searchInput.value);
@@ -642,6 +747,7 @@ let searchMatchIds = null;
 function renderConversations(filter) {
   const q = (filter || "").trim().toLowerCase();
   convoList.innerHTML = "";
+  if (!q) sortConversations();
   const list = !q
     ? conversations
     : conversations.filter((c) => {
@@ -654,16 +760,17 @@ function renderConversations(filter) {
   }
   for (const c of list) {
     const el = document.createElement("div");
-    el.className = "convo" + (c.id === selectedId ? " active" : "") + (c.unread ? " unread" : "");
+    el.className = "convo" + (c.id === selectedId ? " active" : "") + (c.unread ? " unread" : "") + (c.pinned ? " pinned" : "");
     el.dataset.id = c.id;
     el.innerHTML = `
       ${avatarHtml(c.displayName, c.avatarColor, c.photoUrl)}
       <div>
-        <div class="name">${escapeHtml(c.displayName)}${c.unread ? '<span class="dot"></span>' : ""}</div>
+        <div class="name">${escapeHtml(c.displayName)}${c.pinned ? '<span class="pin-mark" title="Pinned">📌</span>' : ""}${c.unread ? '<span class="dot"></span>' : ""}</div>
         <div class="snippet">${escapeHtml(c.snippet || "")}</div>
       </div>
       <div class="when">${formatTime(c.timestamp)}</div>`;
     el.addEventListener("click", () => openThread(c.id, true));
+    el.addEventListener("contextmenu", (e) => showConvoMenu(e, c.id));
     convoList.appendChild(el);
   }
 }
@@ -705,8 +812,20 @@ async function openThread(id, mark) {
   threadPanel.hidden = false;
   document.getElementById("thread-name").textContent = convo.displayName;
   document.getElementById("thread-number").textContent = convo.address;
-  document.getElementById("thread-avatar").outerHTML = avatarHtml(convo.displayName, convo.avatarColor, convo.photoUrl).replace("class=\"avatar\"", "class=\"avatar\" id=\"thread-avatar\"");
+  const avWrap = document.createElement("div");
+  avWrap.innerHTML = avatarHtml(convo.displayName, convo.avatarColor, convo.photoUrl);
+  const av = avWrap.firstElementChild;
+  av.id = "thread-avatar";
+  av.title = "Contact details";
+  av.setAttribute("role", "button");
+  av.tabIndex = 0;
+  av.addEventListener("click", showPeople);
+  av.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showPeople(); }
+  });
+  document.getElementById("thread-avatar").replaceWith(av);
   saveContactBtn.hidden = !canSaveContact(convo);
+  syncPinButton();
   renderConversations(searchInput.value);
   const msgs = await api(`/api/v1/conversations/${id}/messages?limit=50`);
   renderMessages(msgs.slice().reverse());
@@ -831,6 +950,7 @@ newModal.addEventListener("drop", (e) => {
 
 document.getElementById("attach-btn").addEventListener("click", () => fileInput.click());
 gifBtn.addEventListener("click", () => {
+  if (!gifEnabled) return;
   hideEmojiPanel();
   gifPanel.hidden = !gifPanel.hidden;
   if (!gifPanel.hidden) {
@@ -839,6 +959,7 @@ gifBtn.addEventListener("click", () => {
   }
 });
 document.getElementById("new-gif-btn").addEventListener("click", () => {
+  if (!gifEnabled) return;
   hideEmojiPanel();
   const form = document.getElementById("new-form");
   form.insertBefore(gifPanel, form.querySelector(".new-actions"));
@@ -872,7 +993,6 @@ async function searchGifs(q) {
     }
     bindGifHover();
   } catch (err) {
-  } catch (err) {
     gifStatus.textContent = err.message || "Could not search GIFs";
   }
 }
@@ -905,6 +1025,7 @@ function bindGifHover() {
   });
 }
 function pickGif(hit) {
+  if (!gifEnabled) return;
   const fileish = { name: (hit.title || "gif") + ".gif", type: "image/gif" };
   if (!newModal.hidden) {
     pendingNewGifUrl = hit.url;
@@ -928,6 +1049,7 @@ function pickGif(hit) {
 voiceBtn.addEventListener("click", () => toggleVoice(false));
 document.getElementById("new-voice-btn").addEventListener("click", () => toggleVoice(true));
 async function toggleVoice(forNew) {
+  if (!voiceEnabled) return;
   if (voiceRec) {
     await voiceRec.stop();
     return;
@@ -1196,9 +1318,77 @@ document.getElementById("copy-number-btn").addEventListener("click", async () =>
     ta.remove();
   }
   const btn = document.getElementById("copy-number-btn");
-  const prev = btn.textContent;
   btn.textContent = "Copied";
-  setTimeout(() => { btn.textContent = prev; }, 1200);
+  setTimeout(() => { btn.textContent = "Copy Number"; }, 1200);
+});
+function sortConversations() {
+  conversations.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.timestamp || 0) - (a.timestamp || 0));
+}
+function syncPinButton() {
+  const btn = document.getElementById("pin-btn");
+  if (!btn) return;
+  const convo = conversations.find((c) => c.id === selectedId);
+  const pinned = !!(convo && convo.pinned);
+  btn.textContent = pinned ? "Unpin" : "Pin";
+  btn.title = pinned ? "Unpin this conversation" : "Pin this conversation";
+}
+async function setPinned(id, pinned) {
+  const convo = conversations.find((c) => c.id === id);
+  if (!convo) return;
+  const previous = !!convo.pinned;
+  convo.pinned = pinned;
+  sortConversations();
+  syncPinButton();
+  renderConversations(searchInput.value);
+  hideConvoMenu();
+  try {
+    await api("/api/v1/conversations/" + encodeURIComponent(id) + "/pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ pinned }),
+    });
+  } catch (err) {
+    convo.pinned = previous;
+    sortConversations();
+    syncPinButton();
+    renderConversations(searchInput.value);
+    alert(err.message || "Could not pin this conversation.");
+  }
+}
+const convoMenu = document.getElementById("convo-menu");
+let menuThreadId = null;
+function hideConvoMenu() {
+  if (convoMenu) convoMenu.hidden = true;
+  menuThreadId = null;
+}
+function showConvoMenu(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!convoMenu) return;
+  menuThreadId = id;
+  const convo = conversations.find((c) => c.id === id);
+  const pinBtn = document.getElementById("convo-menu-pin");
+  if (pinBtn) pinBtn.textContent = convo && convo.pinned ? "Unpin conversation" : "Pin conversation";
+  convoMenu.hidden = false;
+  const x = Math.min(e.clientX, window.innerWidth - 208);
+  const y = Math.min(e.clientY, window.innerHeight - 56);
+  convoMenu.style.left = x + "px";
+  convoMenu.style.top = y + "px";
+}
+if (document.getElementById("convo-menu-pin")) {
+  document.getElementById("convo-menu-pin").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const id = menuThreadId;
+    const convo = conversations.find((c) => c.id === id);
+    if (id) setPinned(id, !(convo && convo.pinned));
+  });
+}
+document.addEventListener("click", hideConvoMenu);
+document.addEventListener("scroll", hideConvoMenu, true);
+on("pin-btn", "click", () => {
+  const convo = conversations.find((c) => c.id === selectedId);
+  if (!convo) return;
+  setPinned(convo.id, !convo.pinned);
 });
 const peopleModal = document.getElementById("people-modal");
 const peopleList = document.getElementById("people-list");
@@ -1293,6 +1483,7 @@ function renderPreview(container, file, onClear, previewUrl) {
 }
 
 function setPendingImage(file) {
+  if (rejectDisabledMedia(file)) return;
   pendingImage = file;
   renderPreview(pendingPreview, file, () => {
     pendingImage = null;
@@ -1303,6 +1494,7 @@ function setPendingImage(file) {
 }
 
 function setPendingNewImage(file) {
+  if (rejectDisabledMedia(file)) return;
   pendingNewImage = file;
   renderPreview(newPendingPreview, file, () => {
     pendingNewImage = null;
@@ -1348,6 +1540,8 @@ composeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selectedId || sending) return;
   const body = composeText.value.trim();
+  if (pendingGifUrl && !gifEnabled) { alert("GIF sending is turned off on the phone."); return; }
+  if (pendingImage && isAudioFile(pendingImage) && !voiceEnabled) { alert("Voice messages are turned off on the phone."); return; }
   if (!body && !pendingImage && !pendingGifUrl) return;
   const convo = conversations.find((c) => c.id === selectedId);
   sending = true;
@@ -1366,7 +1560,7 @@ composeForm.addEventListener("submit", async (e) => {
     }
     await api(`/api/v1/conversations/${selectedId}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(payload),
     });
     pendingImage = null;
@@ -1472,6 +1666,8 @@ newForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = document.getElementById("new-body").value.trim();
   const number = selectedContact?.number || contactSearch.value.trim();
+  if (pendingNewGifUrl && !gifEnabled) { alert("GIF sending is turned off on the phone."); return; }
+  if (pendingNewImage && isAudioFile(pendingNewImage) && !voiceEnabled) { alert("Voice messages are turned off on the phone."); return; }
   if (!number || (!body && !pendingNewImage && !pendingNewGifUrl)) return;
   try {
     const payload = { recipients: [number], body };
@@ -1483,7 +1679,7 @@ newForm.addEventListener("submit", async (e) => {
     }
     await api("/api/v1/conversations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(payload),
     });
     pendingNewImage = null;
@@ -1517,6 +1713,10 @@ function connectEvents() {
   socket.onmessage = (ev) => {
     let payload = {};
     try { payload = JSON.parse(ev.data); } catch (_) {}
+    if (payload.type === "settings") {
+      applyExperimental(payload);
+      return;
+    }
     if (payload.type === "incoming") {
       const thread = conversations.find((c) =>
         c.address === payload.address || (c.recipients || []).includes(payload.address),
@@ -1641,7 +1841,7 @@ document.getElementById("save-contact-form").addEventListener("submit", async (e
       }
       await api("/api/v1/contacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify({ name, number }),
       });
     } else {
@@ -1651,7 +1851,7 @@ document.getElementById("save-contact-form").addEventListener("submit", async (e
       }
       await api("/api/v1/contacts/" + encodeURIComponent(selectedExistingContact.id) + "/phones", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify({ number }),
       });
     }

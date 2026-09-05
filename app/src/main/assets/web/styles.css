@@ -327,7 +327,9 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
   padding: 10px 18px;
   margin-top: 16px;
 }
+#pair-form button:disabled { opacity: 0.6; }
 .status { min-height: 1.4em; color: var(--muted); }
+#pair-status { color: var(--ink); font-weight: 600; }
 
 #app-view {
   display: grid;
@@ -353,6 +355,15 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
   padding: 16px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
+}
+.thread-head { flex-wrap: wrap; }
+#thread-avatar {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+#thread-avatar:hover, #thread-avatar:focus-visible {
+  box-shadow: 0 0 0 2px var(--primary);
+  outline: none;
 }
 .sidebar-head > div:first-child { flex: 1; min-width: 0; }
 .sidebar-head h1, .thread-head h2 { margin: 0; font-size: 1.1rem; }
@@ -387,6 +398,27 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
 .convo .when { color: var(--muted); font-size: 0.75rem; }
 .unread .name { font-weight: 700; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary-strong); display: inline-block; margin-left: 6px; }
+.convo .pin-mark { color: var(--primary); margin-left: 4px; font-size: 0.85rem; }
+.convo-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 196px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.convo-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.convo-menu button:hover { background: var(--bg); }
 
 .avatar {
   width: 44px; height: 44px; border-radius: 50%;

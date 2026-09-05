@@ -26,12 +26,12 @@
         <h1>LanText</h1>
         <p class="lede">This page is served by your phone on your home Wi-Fi. Enter the PIN shown in the LanText app, then approve the request on the phone.</p>
         <p id="fp-line" class="fingerprint"></p>
-        <form id="pair-form" method="dialog">
+        <form id="pair-form" action="/" method="post">
           <label for="pin">Pairing PIN</label>
           <input id="pin" name="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]{8}" placeholder="00000000" required />
           <button type="submit" id="pair-btn">Pair this computer</button>
         </form>
-        <p id="pair-status" class="status"></p>
+        <p id="pair-status" class="status" role="status" aria-live="polite"></p>
         <button type="button" id="pair-theme-btn" class="text-btn">Appearance</button>
       </div>
     </section>
@@ -62,14 +62,15 @@
         <div id="thread-panel" hidden>
           <header class="thread-head">
             <button id="back-btn" class="icon-btn mobile-only" title="Back">‹</button>
-            <div id="thread-avatar" class="avatar"></div>
+            <div id="thread-avatar" class="avatar" role="button" tabindex="0" title="Contact details"></div>
             <div>
               <h2 id="thread-name"></h2>
               <p id="thread-number" class="muted"></p>
             </div>
-            <button type="button" id="copy-number-btn" class="text-btn" title="Copy phone number">Copy</button>
+            <button type="button" id="copy-number-btn" class="text-btn" title="Copy phone number">Copy Number</button>
             <button type="button" id="people-btn" class="text-btn" title="Contact details">Details</button>
-            <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">PDF</button>
+            <button type="button" id="pin-btn" class="text-btn" title="Pin this conversation">Pin</button>
+            <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">Download Thread</button>
             <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
           <div id="messages" class="messages"></div>
@@ -186,6 +187,9 @@
         </form>
       </div>
     </div>
+  </div>
+  <div id="convo-menu" class="convo-menu" hidden>
+    <button type="button" id="convo-menu-pin">Pin conversation</button>
   </div>
   <div id="gif-hover" hidden>
     <img id="gif-hover-img" alt="" />

@@ -13,6 +13,9 @@ data class AppSettings(
     val webMode: String = "auto",
     val lastNetworkSsid: String? = null,
     val lastNetworkIpv4: String? = null,
+    val gifEnabled: Boolean = true,
+    val voiceEnabled: Boolean = true,
+    val pinnedThreadIds: Set<String> = emptySet(),
 ) {
     companion object {
         const val DEFAULT_PORT = 8743

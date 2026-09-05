@@ -58,6 +58,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         app.settings.setListenPort(port)
     }
 
+    fun setGifEnabled(enabled: Boolean) = viewModelScope.launch {
+        app.settings.setGifEnabled(enabled)
+    }
+
+    fun setVoiceEnabled(enabled: Boolean) = viewModelScope.launch {
+        app.settings.setVoiceEnabled(enabled)
+    }
+
     fun finishOnboarding() = viewModelScope.launch {
         app.settings.setOnboardingDone()
     }

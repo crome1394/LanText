@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
                     onFinishOnboarding = viewModel::finishOnboarding,
                     onEnabled = viewModel::setEnabled,
                     onListenPort = viewModel::setListenPort,
+                    onGifEnabled = viewModel::setGifEnabled,
+                    onVoiceEnabled = viewModel::setVoiceEnabled,
                     onAddCurrent = viewModel::addCurrentNetwork,
                     onAddNetwork = viewModel::addNetwork,
                     onRemoveNetwork = viewModel::removeNetwork,

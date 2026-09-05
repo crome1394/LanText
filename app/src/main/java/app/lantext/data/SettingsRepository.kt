@@ -29,6 +29,9 @@ class SettingsRepository(context: Context) {
             webMode = prefs[KEY_MODE] ?: "auto",
             lastNetworkSsid = prefs[KEY_LAST_SSID],
             lastNetworkIpv4 = prefs[KEY_LAST_IPV4],
+            gifEnabled = prefs[KEY_GIF] ?: true,
+            voiceEnabled = prefs[KEY_VOICE] ?: true,
+            pinnedThreadIds = prefs[KEY_PINNED] ?: emptySet(),
         )
     }
 
@@ -75,6 +78,23 @@ class SettingsRepository(context: Context) {
         store.edit { it[KEY_PORT] = port }
     }
 
+    suspend fun setGifEnabled(enabled: Boolean) {
+        store.edit { it[KEY_GIF] = enabled }
+    }
+
+    suspend fun setVoiceEnabled(enabled: Boolean) {
+        store.edit { it[KEY_VOICE] = enabled }
+    }
+
+    suspend fun setThreadPinned(threadId: String, pinned: Boolean) {
+        val id = threadId.trim()
+        if (id.isEmpty()) return
+        store.edit { prefs ->
+            val cur = prefs[KEY_PINNED] ?: emptySet()
+            prefs[KEY_PINNED] = if (pinned) cur + id else cur - id
+        }
+    }
+
     suspend fun setAppearance(palette: String, mode: String) {
         val p = WidgetTheme.normalizePalette(palette)
         val m = WidgetTheme.normalizeMode(mode)
@@ -116,5 +136,8 @@ class SettingsRepository(context: Context) {
         private val KEY_MODE = stringPreferencesKey("web_mode")
         private val KEY_LAST_SSID = stringPreferencesKey("last_network_ssid")
         private val KEY_LAST_IPV4 = stringPreferencesKey("last_network_ipv4")
+        private val KEY_GIF = booleanPreferencesKey("gif_enabled")
+        private val KEY_VOICE = booleanPreferencesKey("voice_enabled")
+        private val KEY_PINNED = stringSetPreferencesKey("pinned_threads")
     }
 }
