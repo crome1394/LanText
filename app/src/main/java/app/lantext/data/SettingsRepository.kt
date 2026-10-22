@@ -12,11 +12,13 @@ import app.lantext.widget.WidgetTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
 
 private val Context.settingsStore by preferencesDataStore(name = "lantext_settings")
 
 class SettingsRepository(context: Context) {
     private val store = context.applicationContext.settingsStore
+    private val json = Json { ignoreUnknownKeys = true }
 
     val settings: Flow<AppSettings> = store.data.map { prefs ->
         AppSettings(
@@ -32,6 +34,8 @@ class SettingsRepository(context: Context) {
             gifEnabled = prefs[KEY_GIF] ?: true,
             voiceEnabled = prefs[KEY_VOICE] ?: true,
             pinnedThreadIds = prefs[KEY_PINNED] ?: emptySet(),
+            gifApiKey = prefs[KEY_GIF_KEY].orEmpty(),
+            phoneWeb = decodePhone(prefs[KEY_PHONE_WEB]),
         )
     }
 
@@ -82,6 +86,26 @@ class SettingsRepository(context: Context) {
         store.edit { it[KEY_GIF] = enabled }
     }
 
+    suspend fun setGifApiKey(key: String) {
+        val clean = key.trim()
+        if (current().gifApiKey == clean) return
+        store.edit { it[KEY_GIF_KEY] = clean }
+    }
+
+    suspend fun setPhoneWeb(web: PhoneWeb) {
+        if (current().phoneWeb == web) return
+        store.edit { it[KEY_PHONE_WEB] = json.encodeToString(PhoneWeb.serializer(), web) }
+    }
+
+    private fun decodePhone(raw: String?): PhoneWeb {
+        if (raw.isNullOrBlank()) return PhoneWeb()
+        return try {
+            json.decodeFromString(PhoneWeb.serializer(), raw)
+        } catch (_: Exception) {
+            PhoneWeb()
+        }
+    }
+
     suspend fun setVoiceEnabled(enabled: Boolean) {
         store.edit { it[KEY_VOICE] = enabled }
     }
@@ -101,6 +125,11 @@ class SettingsRepository(context: Context) {
         store.edit {
             it[KEY_PALETTE] = p
             it[KEY_MODE] = m
+            // One write, so a computer Appearance change is not echoed back as the previous phone snapshot.
+            val phone = decodePhone(it[KEY_PHONE_WEB])
+            if (phone.palette.isNotBlank() && (phone.palette != p || phone.mode != m)) {
+                it[KEY_PHONE_WEB] = json.encodeToString(PhoneWeb.serializer(), phone.copy(palette = p, mode = m))
+            }
         }
     }
 
@@ -139,5 +168,7 @@ class SettingsRepository(context: Context) {
         private val KEY_GIF = booleanPreferencesKey("gif_enabled")
         private val KEY_VOICE = booleanPreferencesKey("voice_enabled")
         private val KEY_PINNED = stringSetPreferencesKey("pinned_threads")
+        private val KEY_GIF_KEY = stringPreferencesKey("gif_api_key")
+        private val KEY_PHONE_WEB = stringPreferencesKey("phone_web")
     }
 }

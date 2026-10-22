@@ -369,6 +369,12 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
 .sidebar-head h1, .thread-head h2 { margin: 0; font-size: 1.1rem; }
 .muted { color: var(--muted); margin: 0; font-size: 0.85rem; }
 .search-wrap { padding: 8px 12px; flex-shrink: 0; }
+body.search-bottom .search-wrap { order: 3; border-top: 1px solid var(--line); }
+body.search-bottom .convo-list { order: 2; }
+body.search-bottom #notify-banner { order: 1; }
+body.striped .convo:nth-child(even):not(.active):not(:hover) {
+  background: color-mix(in srgb, var(--bg) 82%, var(--ink));
+}
 .convo-list {
   flex: 1 1 auto;
   min-height: 0;
@@ -419,6 +425,7 @@ input[type="search"], input[type="text"], input:not([type]), textarea {
   border-radius: 8px;
 }
 .convo-menu button:hover { background: var(--bg); }
+.convo-menu button.danger, .text-btn.danger { color: #8c2f2f; }
 
 .avatar {
   width: 44px; height: 44px; border-radius: 50%;

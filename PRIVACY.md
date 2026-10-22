@@ -32,6 +32,12 @@ Location is still required for the live Wi-Fi name on current Pixels, even
 with Nearby devices. Coordinates are never read, stored, or sent. Nearby
 devices is not a scan for headphones, speakers, or other phones.
 
+## Local network
+
+On Android 17 and newer, LanText asks for local network access so a computer
+on your Wi-Fi can open the inbox. Android blocks that traffic until you allow
+it. The listener still binds only to this phone's Wi-Fi address.
+
 ## Certificates and pairing
 
 The HTTPS certificate is generated on the phone. Pairing requires the PIN shown

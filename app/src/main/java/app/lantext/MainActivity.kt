@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.lantext.net.WifiGate
 import app.lantext.ui.AppViewModel
 import app.lantext.ui.LanTextAppUi
 import app.lantext.ui.LanTextTheme
@@ -79,6 +80,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) {
             needed += Manifest.permission.POST_NOTIFICATIONS
             needed += Manifest.permission.NEARBY_WIFI_DEVICES
+        }
+        if (Build.VERSION.SDK_INT >= 37) {
+            needed += WifiGate.PERMISSION_ACCESS_LOCAL_NETWORK
         }
         needed += Manifest.permission.ACCESS_FINE_LOCATION
         permissionLauncher.launch(needed.toTypedArray())

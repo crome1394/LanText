@@ -70,6 +70,8 @@
             <button type="button" id="copy-number-btn" class="text-btn" title="Copy phone number">Copy Number</button>
             <button type="button" id="people-btn" class="text-btn" title="Contact details">Details</button>
             <button type="button" id="pin-btn" class="text-btn" title="Pin this conversation">Pin</button>
+            <button type="button" id="read-btn" class="text-btn" title="Mark this conversation as read">Mark read</button>
+            <button type="button" id="delete-thread-btn" class="text-btn danger" title="Delete this conversation">Delete</button>
             <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">Download Thread</button>
             <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
@@ -85,7 +87,7 @@
               <textarea id="compose-text" rows="1" placeholder="Message, GIF, or voice note" title="Enter to send, Shift+Enter for a new line"></textarea>
               <div id="emoji-panel" class="emoji-panel" hidden></div>
               <div id="gif-panel" class="gif-panel" hidden>
-                <input id="gif-search" type="search" placeholder="Search GIFs" />
+                <input id="gif-search" type="search" placeholder="Search KLIPY" />
                 <p id="gif-status" class="muted" hidden></p>
                 <div id="gif-grid" class="gif-grid"></div>
               </div>
@@ -190,6 +192,11 @@
   </div>
   <div id="convo-menu" class="convo-menu" hidden>
     <button type="button" id="convo-menu-pin">Pin conversation</button>
+    <button type="button" id="convo-menu-read">Mark as read</button>
+    <button type="button" id="convo-menu-delete" class="danger">Delete conversation</button>
+  </div>
+  <div id="message-menu" class="convo-menu" hidden>
+    <button type="button" id="message-menu-delete" class="danger">Delete message</button>
   </div>
   <div id="gif-hover" hidden>
     <img id="gif-hover-img" alt="" />

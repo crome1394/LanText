@@ -1,8 +1,11 @@
 package app.lantext.sms
 
+import android.app.PendingIntent
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
@@ -10,6 +13,7 @@ import android.os.HandlerThread
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
+import java.util.concurrent.atomic.AtomicInteger
 import app.lantext.util.PhoneNumbers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +29,7 @@ class SmsRepository(
     private val contacts: ContactsRepository,
 ) {
     private val region = PhoneNumbers.defaultRegion(context)
+    private val sentRequestCodes = AtomicInteger(3_000)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val events: SharedFlow<String> = _events
@@ -101,6 +106,7 @@ class SmsRepository(
                 Telephony.Sms.DATE,
                 Telephony.Sms.TYPE,
                 Telephony.Sms.STATUS,
+                Telephony.Sms.SUBSCRIPTION_ID,
             ),
             selection,
             args,
@@ -112,9 +118,11 @@ class SmsRepository(
             val iBody = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val iDate = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
             val iType = cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE)
+            val iSub = cursor.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
             while (cursor.moveToNext() && out.size < limit) {
                 val address = cursor.getString(iAddress).orEmpty()
                 val type = cursor.getInt(iType)
+                val sub = if (iSub >= 0) cursor.getInt(iSub) else -1
                 out += MessageDto(
                     id = "sms-${cursor.getLong(iId)}",
                     threadId = cursor.getLong(iThread).toString(),
@@ -125,11 +133,14 @@ class SmsRepository(
                     incoming = type == Telephony.Sms.MESSAGE_TYPE_INBOX,
                     type = "sms",
                     status = statusName(type),
+                    simSlot = slotFor(sub),
                 )
             }
         }
         out += loadMms(id, before, limit)
-        out.sortedByDescending { it.timestamp }.take(limit)
+        orderEchoes(out, { it.id }, { it.threadId }, { it.body }, { it.timestamp }, { it.incoming })
+            .asReversed()
+            .take(limit)
     }
 
     suspend fun search(query: String): List<SearchHit> = withContext(Dispatchers.IO) {
@@ -279,27 +290,41 @@ class SmsRepository(
             .filter { it.isNotBlank() }
         require(dest.isNotEmpty()) { "No recipients" }
         val manager = smsManager(subscriptionId)
-        withContext(Dispatchers.IO) {
-            for (address in dest) {
+        val stored = withContext(Dispatchers.IO) {
+            dest.map { address ->
+                val row = storeOutgoingSms(address, text, subscriptionId)
                 val parts = manager.divideMessage(text)
-                if (parts.size == 1) {
-                    manager.sendTextMessage(address, null, text, null, null)
-                } else {
-                    manager.sendMultipartTextMessage(address, null, parts, null, null)
+                val intents = ArrayList<PendingIntent>(parts.size.coerceAtLeast(1))
+                val count = parts.size.coerceAtLeast(1)
+                repeat(count) { index ->
+                    intents += sentIntent(row.uri, index, count)
                 }
+                SentParts.begin(row.uri.toString(), count)
+                try {
+                    if (parts.size <= 1) {
+                        manager.sendTextMessage(address, null, text, intents.firstOrNull(), null)
+                    } else {
+                        manager.sendMultipartTextMessage(address, null, parts, intents, null)
+                    }
+                } catch (t: Throwable) {
+                    markSms(row.uri, Telephony.Sms.MESSAGE_TYPE_FAILED)
+                    SentParts.takeFailed(row.uri.toString())
+                    throw t
+                }
+                row
             }
         }
-        val address = dest.joinToString(", ")
+        val first = stored.first()
         return MessageDto(
-            id = "local-${System.currentTimeMillis()}",
-            threadId = "",
-            address = address,
+            id = "sms-${first.uri.lastPathSegment}",
+            threadId = first.threadId.toString(),
+            address = dest.joinToString(", "),
             displayName = contacts.displayName(dest.first()),
             body = text,
             timestamp = System.currentTimeMillis(),
             incoming = false,
             type = "sms",
-            status = "sending",
+            status = "sent",
         )
     }
 
@@ -316,15 +341,23 @@ class SmsRepository(
         require(imageBytes != null && imageBytes.isNotEmpty()) { "MMS requires an attachment" }
         val mime = imageMime ?: "image/jpeg"
         val subId = subscriptionId ?: android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
-        MmsSender.send(context, smsManager(subscriptionId), dest, body, imageBytes, mime, subId)
+        val outbound = MmsSender.send(context, smsManager(subscriptionId), dest, body, imageBytes, mime, subId)
+        val threadId = Telephony.Threads.getOrCreateThreadId(context, dest.toHashSet())
+        val storedId = try {
+            if (recentMmsExists(threadId, body)) null
+            else insertOutgoingMms(threadId, dest, body, outbound.bytes, outbound.mime, subId)
+        } catch (t: Throwable) {
+            android.util.Log.w("LanText", "Sent MMS was not copied into the conversation", t)
+            null
+        }
         val label = when {
             mime.contains("gif", true) -> "GIF"
             mime.startsWith("audio/") -> "Voice message"
             else -> "Picture"
         }
         MessageDto(
-            id = "local-mms-${System.currentTimeMillis()}",
-            threadId = "",
+            id = storedId?.let { "mms-$it" } ?: "local-mms-${System.currentTimeMillis()}",
+            threadId = threadId.toString(),
             address = dest.joinToString(", "),
             displayName = contacts.displayName(dest.first()),
             body = body.ifBlank { label },
@@ -336,17 +369,217 @@ class SmsRepository(
         )
     }
 
+    private data class StoredSms(val uri: Uri, val threadId: Long)
+
+    /** Writes the sent row the default SMS app has to store itself. The radio does not. */
+    private fun storeOutgoingSms(address: String, body: String, subscriptionId: Int?): StoredSms {
+        val threadId = Telephony.Threads.getOrCreateThreadId(context, address)
+        val values = ContentValues().apply {
+            put(Telephony.Sms.ADDRESS, address)
+            put(Telephony.Sms.BODY, body)
+            put(Telephony.Sms.DATE, System.currentTimeMillis())
+            put(Telephony.Sms.READ, 1)
+            put(Telephony.Sms.SEEN, 1)
+            put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+            put(Telephony.Sms.THREAD_ID, threadId)
+            val id = subscriptionId ?: SubscriptionManager.INVALID_SUBSCRIPTION_ID
+            if (id != SubscriptionManager.INVALID_SUBSCRIPTION_ID) put(Telephony.Sms.SUBSCRIPTION_ID, id)
+        }
+        val uri = try {
+            context.contentResolver.insert(Telephony.Sms.CONTENT_URI, values)
+        } catch (_: SecurityException) {
+            null
+        } ?: throw IllegalStateException("Set lMessages as the default SMS app to send.")
+        return StoredSms(uri, threadId)
+    }
+
+    private fun sentIntent(uri: Uri, index: Int, count: Int): PendingIntent {
+        val intent = Intent(context, SmsSentReceiver::class.java).apply {
+            action = SmsSentReceiver.ACTION_SENT
+            data = Uri.parse("lantext://sms-sent/${uri.lastPathSegment}/$index")
+            putExtra(SmsSentReceiver.EXTRA_URI, uri.toString())
+            putExtra(SmsSentReceiver.EXTRA_INDEX, index)
+            putExtra(SmsSentReceiver.EXTRA_COUNT, count)
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getBroadcast(context, sentRequestCodes.incrementAndGet(), intent, flags)
+    }
+
+    private fun markSms(uri: Uri, type: Int) {
+        val values = ContentValues().apply { put(Telephony.Sms.TYPE, type) }
+        try {
+            context.contentResolver.update(uri, values, null, null)
+        } catch (_: SecurityException) {
+        }
+    }
+
+    private fun recentMmsExists(threadId: Long, body: String): Boolean {
+        val since = (System.currentTimeMillis() / 1000) - if (body.isBlank()) 20 else 180
+        val ids = mutableListOf<Long>()
+        context.contentResolver.query(
+            Telephony.Mms.CONTENT_URI,
+            arrayOf(Telephony.Mms._ID),
+            "${Telephony.Mms.THREAD_ID}=? AND ${Telephony.Mms.DATE}>=?",
+            arrayOf(threadId.toString(), since.toString()),
+            null,
+        )?.use { cursor ->
+            val id = cursor.getColumnIndexOrThrow(Telephony.Mms._ID)
+            while (cursor.moveToNext()) ids += cursor.getLong(id)
+        }
+        if (ids.isEmpty()) return false
+        if (body.isBlank()) return ids.any { mmsHasMedia(it) }
+        val needle = body.take(80)
+        return ids.any { mmsText(it).contains(needle) }
+    }
+
+    private fun mmsText(mmsId: Long): String {
+        val out = StringBuilder()
+        context.contentResolver.query(
+            Uri.parse("content://mms/$mmsId/part"),
+            arrayOf(Telephony.Mms.Part.CONTENT_TYPE, Telephony.Mms.Part.TEXT),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val type = cursor.getColumnIndexOrThrow(Telephony.Mms.Part.CONTENT_TYPE)
+            val text = cursor.getColumnIndexOrThrow(Telephony.Mms.Part.TEXT)
+            while (cursor.moveToNext()) {
+                if (cursor.getString(type).orEmpty().startsWith("text/")) {
+                    out.append(cursor.getString(text).orEmpty())
+                }
+            }
+        }
+        return out.toString()
+    }
+
+    private fun mmsHasMedia(mmsId: Long): Boolean {
+        var found = false
+        context.contentResolver.query(
+            Uri.parse("content://mms/$mmsId/part"),
+            arrayOf(Telephony.Mms.Part.CONTENT_TYPE),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val type = cursor.getColumnIndexOrThrow(Telephony.Mms.Part.CONTENT_TYPE)
+            while (cursor.moveToNext()) {
+                val mime = cursor.getString(type).orEmpty()
+                if (mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/")) found = true
+            }
+        }
+        return found
+    }
+
+    private fun insertOutgoingMms(
+        threadId: Long,
+        addresses: List<String>,
+        body: String,
+        attachment: ByteArray?,
+        mime: String?,
+        subId: Int,
+    ): Long? {
+        val values = ContentValues().apply {
+            put(Telephony.Mms.THREAD_ID, threadId)
+            put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000)
+            put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_SENT)
+            put(Telephony.Mms.READ, 1)
+            put(Telephony.Mms.SEEN, 1)
+            put(Telephony.Mms.MESSAGE_TYPE, 128)
+            put(Telephony.Mms.CONTENT_TYPE, "application/vnd.wap.multipart.related")
+            put(Telephony.Mms.TEXT_ONLY, if (attachment == null) 1 else 0)
+            put(Telephony.Mms.MESSAGE_SIZE, attachment?.size ?: body.length)
+            if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) put(Telephony.Mms.SUBSCRIPTION_ID, subId)
+        }
+        val uri = context.contentResolver.insert(Telephony.Mms.Sent.CONTENT_URI, values) ?: return null
+        val id = uri.lastPathSegment?.toLongOrNull() ?: return null
+        for (address in addresses) {
+            val addr = ContentValues().apply {
+                put(Telephony.Mms.Addr.ADDRESS, address)
+                put(Telephony.Mms.Addr.TYPE, 151)
+                put(Telephony.Mms.Addr.CHARSET, 106)
+            }
+            context.contentResolver.insert(Uri.parse("content://mms/$id/addr"), addr)
+        }
+        if (body.isNotBlank()) {
+            val part = ContentValues().apply {
+                put(Telephony.Mms.Part.CONTENT_TYPE, "text/plain")
+                put(Telephony.Mms.Part.CHARSET, 106)
+                put(Telephony.Mms.Part.TEXT, body)
+                put(Telephony.Mms.Part.CONTENT_LOCATION, "text_0.txt")
+            }
+            context.contentResolver.insert(Uri.parse("content://mms/$id/part"), part)
+        }
+        if (attachment != null) {
+            val kind = mime ?: "image/jpeg"
+            val ext = when {
+                kind.contains("gif") -> "gif"
+                kind.contains("png") -> "png"
+                kind.contains("webp") -> "webp"
+                kind.startsWith("audio/") -> "amr"
+                kind.startsWith("video/") -> "mp4"
+                else -> "jpg"
+            }
+            val part = ContentValues().apply {
+                put(Telephony.Mms.Part.CONTENT_TYPE, kind)
+                put(Telephony.Mms.Part.NAME, "media.$ext")
+                put(Telephony.Mms.Part.CONTENT_LOCATION, "media.$ext")
+            }
+            val partUri = context.contentResolver.insert(Uri.parse("content://mms/$id/part"), part)
+            if (partUri != null) {
+                context.contentResolver.openOutputStream(partUri)?.use { it.write(attachment) }
+            }
+        }
+        return id
+    }
+
     fun markRead(threadId: String) {
         try {
-            val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
+            val sms = ContentValues().apply {
+                put(Telephony.Sms.READ, 1)
+                put(Telephony.Sms.SEEN, 1)
+            }
             context.contentResolver.update(
                 Telephony.Sms.CONTENT_URI,
-                values,
-                "${Telephony.Sms.THREAD_ID}=? AND ${Telephony.Sms.READ}=0",
+                sms,
+                "${Telephony.Sms.THREAD_ID}=?",
+                arrayOf(threadId),
+            )
+            val mms = ContentValues().apply {
+                put(Telephony.Mms.READ, 1)
+                put(Telephony.Mms.SEEN, 1)
+            }
+            context.contentResolver.update(
+                Telephony.Mms.CONTENT_URI,
+                mms,
+                "${Telephony.Mms.THREAD_ID}=?",
                 arrayOf(threadId),
             )
         } catch (_: SecurityException) {
-            // Not the default SMS app; computer-side read is still tracked in the UI.
+            return
+        }
+        emitRefresh()
+    }
+
+    fun deleteConversation(threadId: String): Boolean {
+        val id = threadId.toLongOrNull() ?: return false
+        return try {
+            context.contentResolver.delete(Uri.parse("content://mms-sms/conversations/$id"), null, null)
+            emitRefresh()
+            true
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
+    fun deleteMessage(messageId: String): Boolean {
+        val ref = parseStoredMessageId(messageId) ?: return false
+        val base = if (ref.mms) Telephony.Mms.CONTENT_URI else Telephony.Sms.CONTENT_URI
+        return try {
+            context.contentResolver.delete(ContentUris.withAppendedId(base, ref.id), null, null)
+            emitRefresh()
+            true
+        } catch (_: SecurityException) {
+            false
         }
     }
 
@@ -474,6 +707,7 @@ class SmsRepository(
                 Telephony.Mms.THREAD_ID,
                 Telephony.Mms.DATE,
                 Telephony.Mms.MESSAGE_BOX,
+                Telephony.Mms.SUBSCRIPTION_ID,
             ),
             selection,
             args,
@@ -483,6 +717,7 @@ class SmsRepository(
             val iThread = cursor.getColumnIndexOrThrow(Telephony.Mms.THREAD_ID)
             val iDate = cursor.getColumnIndexOrThrow(Telephony.Mms.DATE)
             val iBox = cursor.getColumnIndexOrThrow(Telephony.Mms.MESSAGE_BOX)
+            val iSub = cursor.getColumnIndex(Telephony.Mms.SUBSCRIPTION_ID)
             while (cursor.moveToNext() && out.size < limit) {
                 val mmsId = cursor.getLong(iId)
                 val address = mmsAddress(mmsId).orEmpty()
@@ -513,6 +748,7 @@ class SmsRepository(
                     type = "mms",
                     status = if (box == Telephony.Mms.MESSAGE_BOX_SENT) "sent" else "received",
                     attachments = attachments,
+                    simSlot = slotFor(if (iSub >= 0) cursor.getInt(iSub) else -1),
                 )
             }
         }
@@ -575,6 +811,25 @@ class SmsRepository(
         return out
     }
 
+    private val simSlots = HashMap<Int, Int>()
+
+    private fun slotFor(subId: Int): Int {
+        if (subId < 0) return -1
+        synchronized(simSlots) {
+            simSlots[subId]?.let { return it }
+            val slot = try {
+                context.getSystemService(SubscriptionManager::class.java)
+                    ?.getActiveSubscriptionInfo(subId)
+                    ?.simSlotIndex
+                    ?: -1
+            } catch (_: SecurityException) {
+                -1
+            }
+            simSlots[subId] = slot
+            return slot
+        }
+    }
+
     private fun statusName(type: Int): String = when (type) {
         Telephony.Sms.MESSAGE_TYPE_INBOX -> "received"
         Telephony.Sms.MESSAGE_TYPE_SENT -> "sent"
@@ -610,4 +865,17 @@ class SmsRepository(
             )
         }
     }
+}
+
+data class StoredMessageId(val mms: Boolean, val id: Long)
+
+fun parseStoredMessageId(messageId: String): StoredMessageId? {
+    val mms = when {
+        messageId.startsWith("mms-") -> true
+        messageId.startsWith("sms-") -> false
+        else -> return null
+    }
+    val id = messageId.substring(4).toLongOrNull() ?: return null
+    if (id <= 0L) return null
+    return StoredMessageId(mms, id)
 }

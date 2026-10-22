@@ -18,9 +18,11 @@ class MmsAudioTest {
 
     @Test
     fun gifHostAllowlist() {
-        assertTrue(GifSearch.isAllowed("https://upload.wikimedia.org/wikipedia/commons/a/a.gif"))
+        assertTrue(GifSearch.isAllowed("https://static.klipy.com/a.gif"))
+        assertTrue(GifSearch.isAllowed("https://static.klipy.co/a.gif"))
+        org.junit.Assert.assertFalse(GifSearch.isAllowed("https://upload.wikimedia.org/wikipedia/commons/a/a.gif"))
         org.junit.Assert.assertFalse(GifSearch.isAllowed("https://evil.example/x.gif"))
-        org.junit.Assert.assertFalse(GifSearch.isAllowed("http://upload.wikimedia.org/wikipedia/commons/x.gif"))
+        org.junit.Assert.assertFalse(GifSearch.isAllowed("http://static.klipy.com/a.gif"))
     }
 
     private fun wavOf(samples: ShortArray, rate: Int): ByteArray {

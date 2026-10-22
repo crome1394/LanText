@@ -104,12 +104,16 @@ fun LanTextAppUi(
     onApprove: (String) -> Unit,
     onDeny: (String) -> Unit,
     onRevoke: (String) -> Unit,
+    embedded: Boolean = false,
+    active: Boolean = true,
+    appLabel: String = "LanText",
 ) {
     var dest by remember { mutableStateOf(Dest.Home) }
-    BackHandler(enabled = dest != Dest.Home) { dest = Dest.Home }
+    BackHandler(enabled = active && dest != Dest.Home) { dest = Dest.Home }
     if (!permissions.allGranted) {
         PermissionRationaleDialog(
             state = permissions,
+            appLabel = appLabel,
             onGrantAll = onRequestPermissions,
         )
     }
@@ -133,33 +137,17 @@ fun LanTextAppUi(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when (dest) {
-                            Dest.Home -> "LanText"
-                            Dest.Networks -> "Wi-Fi networks"
-                            Dest.Paired -> "Paired computers"
-                            Dest.Settings -> "Settings"
-                            Dest.About -> "About"
-                        },
-                    )
-                },
-                navigationIcon = {
-                    if (dest != Dest.Home) {
-                        IconButton(onClick = { dest = Dest.Home }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    val title = when (dest) {
+        Dest.Home -> if (embedded) "LanMessaging" else "LanText"
+        Dest.Networks -> "Wi-Fi networks"
+        Dest.Paired -> "Paired computers"
+        Dest.Settings -> "Settings"
+        Dest.About -> "About"
+    }
+    val pages: @Composable (Modifier) -> Unit = { modifier ->
         when (dest) {
             Dest.Home -> HomeScreen(
-                modifier = Modifier.padding(padding),
+                modifier = modifier,
                 snapshot = snapshot,
                 settings = settings,
                 currentSsid = currentSsid,
@@ -173,7 +161,7 @@ fun LanTextAppUi(
                 onRecyclePairing = onRecyclePairing,
             )
             Dest.Networks -> NetworksScreen(
-                modifier = Modifier.padding(padding),
+                modifier = modifier,
                 settings = settings,
                 currentSsid = currentSsid,
                 onAddCurrent = onAddCurrent,
@@ -182,17 +170,47 @@ fun LanTextAppUi(
                 onForgetNetwork = onForgetNetwork,
             )
             Dest.Paired -> PairedScreen(
-                modifier = Modifier.padding(padding),
+                modifier = modifier,
                 devices = devices,
                 onRevoke = onRevoke,
             )
             Dest.Settings -> SettingsScreen(
-                modifier = Modifier.padding(padding),
+                modifier = modifier,
                 settings = settings,
                 onGifEnabled = onGifEnabled,
                 onVoiceEnabled = onVoiceEnabled,
             )
-            Dest.About -> AboutScreen(Modifier.padding(padding), permissions)
+            Dest.About -> AboutScreen(modifier, permissions)
+        }
+    }
+    if (embedded) {
+        Column(Modifier.fillMaxSize()) {
+            if (dest != Dest.Home) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { dest = Dest.Home }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Text(title, style = MaterialTheme.typography.titleLarge)
+                }
+            }
+            pages(Modifier.weight(1f))
+        }
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = {
+                        if (dest != Dest.Home) {
+                            IconButton(onClick = { dest = Dest.Home }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            pages(Modifier.padding(padding))
         }
     }
 }
@@ -220,6 +238,7 @@ private fun OnboardingScreen(
 @Composable
 private fun PermissionRationaleDialog(
     state: PermissionState,
+    appLabel: String,
     onGrantAll: () -> Unit,
 ) {
     Dialog(
@@ -233,9 +252,9 @@ private fun PermissionRationaleDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Permissions LanText needs", style = MaterialTheme.typography.titleLarge)
+                Text("Permissions $appLabel needs", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Android will show a system prompt for each of these. Nothing they unlock is uploaded. Nearby devices and location are only so the inbox can read the Wi-Fi name.",
+                    "Android will show a system prompt for each of these. Nothing they unlock is uploaded. Nearby devices and location are only so the inbox can read the Wi-Fi name. On Android 17, local network access is what lets a computer on your Wi-Fi open the page.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 permissionRationales(state).forEach { item ->
@@ -246,7 +265,7 @@ private fun PermissionRationaleDialog(
                     Text("Grant all")
                 }
                 Text(
-                    "If Android does not ask again, enable them in Settings → Apps → LanText → Permissions.",
+                    "If Android does not ask again, enable them in Settings → Apps → $appLabel → Permissions. On Android 17, allow Local network.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -519,7 +538,7 @@ private fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text("GIF search and send") },
                     supportingContent = {
-                        Text("Look up GIFs from a public catalog and send them as MMS through your carrier. Experimental.")
+                        Text("Search KLIPY with the key from Settings, GIFs, and send a small GIF as MMS. Experimental.")
                     },
                     trailingContent = {
                         Switch(checked = settings.gifEnabled, onCheckedChange = onGifEnabled)
@@ -608,6 +627,9 @@ private fun AboutScreen(modifier: Modifier, permissions: PermissionState) {
                 if (permissions.locationRequired) {
                     PermissionCard("Location", LOCATION_WHY)
                 }
+                if (permissions.localNetworkRequired) {
+                    PermissionCard("Local network", LOCAL_NETWORK_WHY)
+                }
                 PermissionCard("Network", NETWORK_WHY)
             }
         }
@@ -683,6 +705,9 @@ private fun permissionRationales(state: PermissionState): List<PermissionRationa
     if (state.locationRequired) {
         add(PermissionRationale("Location", LOCATION_WHY, state.location))
     }
+    if (state.localNetworkRequired) {
+        add(PermissionRationale("Local network", LOCAL_NETWORK_WHY, state.localNetwork))
+    }
 }
 
 private const val SMS_WHY =
@@ -695,8 +720,10 @@ private const val NEARBY_DEVICES_WHY =
     "On Android 13 and newer only. Required so Android will tell LanText the Wi-Fi name while the listener runs in the background. Not a scan for headphones, speakers, or other phones."
 private const val LOCATION_WHY =
     "Required on every version LanText supports, including Android 13+. Android hides the current Wi-Fi name without it. Used only to compare that name to your allowlist. Coordinates are never read, stored, or sent."
+private const val LOCAL_NETWORK_WHY =
+    "On Android 17 and newer, Android drops connections from other devices on your Wi-Fi until you allow this. The phone still answers ping. The browser connection to the inbox times out until it is granted. It does not expose the phone to the internet."
 private const val NETWORK_WHY =
-    "Declared so the phone can accept HTTPS on your Wi-Fi. Android does not show a prompt for this. There is no LanText cloud; the listener binds only to this phone’s Wi-Fi address on networks you allow."
+    "Lets the listener open a socket. There is no LanText cloud; the listener binds only to this phone’s Wi-Fi address on networks you allow."
 private const val GITHUB_URL = "https://github.com/crome1394/LanText"
 
 private val LAN_OPERATOR_NOTES = listOf(
@@ -757,6 +784,7 @@ private fun statusText(snapshot: GatewaySnapshot): String = when {
         GateReason.SSID_HIDDEN -> "Wi-Fi is on, but Android is hiding the network name. Allow Location."
         GateReason.MISSING_SMS_PERMISSION -> "SMS permission needed"
         GateReason.MISSING_NOTIFICATION_PERMISSION -> "Notification permission needed"
+        GateReason.MISSING_LOCAL_NETWORK_PERMISSION -> "Local network permission needed"
         else -> "Stopped"
     }
 }

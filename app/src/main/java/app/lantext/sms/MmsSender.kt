@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import android.telephony.SmsManager
 import android.util.Log
 import com.google.android.mms.ContentType
@@ -31,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object MmsSender {
     private const val TAG = "LanText.Mms"
+    class Outbound(val bytes: ByteArray, val mime: String)
     data class ImagePayload(val bytes: ByteArray, val mime: String)
     data class Prepared(
         val bytes: ByteArray,
@@ -39,52 +39,93 @@ object MmsSender {
         val smilTag: String,
     )
 
-    fun prepare(bytes: ByteArray, mime: String): Prepared {
+    fun prepare(bytes: ByteArray, mime: String, maxBytes: Int, maxEdge: Int): Prepared {
         val kind = mime.lowercase()
+        val budget = maxBytes.coerceIn(20_000, 1_200_000)
         return when {
             kind.contains("gif") -> {
-                require(bytes.size <= GifSearch.MAX_BYTES) {
-                    "GIF is too large for MMS (carriers cap around 300 KB)"
-                }
+                val cap = minOf(GifSearch.MAX_BYTES, budget)
+                require(bytes.size <= cap) { "GIF is too large for this carrier." }
                 require(bytes.size >= 6 && bytes[0] == 'G'.code.toByte()) { "Not a GIF" }
                 Prepared(bytes, ContentType.IMAGE_GIF, "image_0.gif", "img")
             }
             kind.startsWith("audio/") -> {
                 val amr = MmsAudio.toAmr(bytes)
+                require(amr.size <= budget) { "That audio clip is too large for this carrier." }
                 Prepared(amr, ContentType.AUDIO_AMR, "audio_0.amr", "audio")
             }
+            kind.startsWith("video/") -> {
+                require(bytes.size <= budget) { "That video is too large for this carrier." }
+                if (kind.contains("3gpp")) {
+                    Prepared(bytes, ContentType.VIDEO_3GPP, "video_0.3gp", "video")
+                } else if (kind.contains("mp4")) {
+                    Prepared(bytes, ContentType.VIDEO_MP4, "video_0.mp4", "video")
+                } else {
+                    throw IllegalArgumentException("That video format cannot be sent. Choose an MP4.")
+                }
+            }
             else -> {
-                val img = resizeIfNeeded(bytes, mime)
+                val img = resizeIfNeeded(bytes, budget, maxEdge)
                 Prepared(img.bytes, ContentType.IMAGE_JPEG, "image_0.jpg", "img")
             }
         }
     }
 
-    fun resizeIfNeeded(bytes: ByteArray, mime: String, maxBytes: Int = 200_000, maxEdge: Int = 1024): ImagePayload {
-        val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            ?: throw IllegalArgumentException("Could not read that picture")
-        val scale = maxOf(original.width, original.height).toFloat() / maxEdge
-        val bmp = if (scale > 1f) {
-            Bitmap.createScaledBitmap(
-                original,
-                (original.width / scale).toInt().coerceAtLeast(1),
-                (original.height / scale).toInt().coerceAtLeast(1),
-                true,
-            )
-        } else {
-            original
+    fun resizeIfNeeded(bytes: ByteArray, maxBytes: Int = 200_000, maxEdge: Int = 1024): ImagePayload {
+        val edgeLimit = maxEdge.coerceIn(160, 2048)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val sampled = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, edgeLimit)
         }
+        val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, sampled)
+            ?: throw IllegalArgumentException("Could not read that picture")
+        var edge = edgeLimit
+        var current = scaleDown(original, edge)
+        if (current !== original) original.recycle()
         var quality = 80
-        var out: ByteArray
-        do {
-            val stream = ByteArrayOutputStream()
-            bmp.compress(Bitmap.CompressFormat.JPEG, quality, stream)
-            out = stream.toByteArray()
-            quality -= 10
-        } while (out.size > maxBytes && quality >= 35)
-        if (bmp !== original) bmp.recycle()
-        if (!original.isRecycled) original.recycle()
-        return ImagePayload(out, "image/jpeg")
+        try {
+            while (true) {
+                val stream = ByteArrayOutputStream()
+                if (!current.compress(Bitmap.CompressFormat.JPEG, quality, stream)) {
+                    throw IllegalArgumentException("Could not read that picture")
+                }
+                val out = stream.toByteArray()
+                if (out.size <= maxBytes) return ImagePayload(out, "image/jpeg")
+                if (quality > 45) {
+                    quality -= 10
+                    continue
+                }
+                val nextEdge = (edge * 3) / 4
+                if (nextEdge < 320 || nextEdge >= edge) {
+                    throw IllegalArgumentException("That picture is too large for this carrier.")
+                }
+                edge = nextEdge
+                val scaled = scaleDown(current, edge)
+                if (scaled !== current) current.recycle()
+                current = scaled
+                quality = 70
+            }
+        } finally {
+            if (!current.isRecycled) current.recycle()
+        }
+    }
+
+    private fun scaleDown(source: Bitmap, maxEdge: Int): Bitmap {
+        val largest = maxOf(source.width, source.height)
+        if (largest <= maxEdge || largest <= 0) return source
+        val ratio = maxEdge.toFloat() / largest
+        val width = (source.width * ratio).toInt().coerceAtLeast(1)
+        val height = (source.height * ratio).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(source, width, height, true)
+    }
+
+    private fun sampleSize(width: Int, height: Int, maxEdge: Int): Int {
+        var sample = 1
+        val longEdge = maxOf(width, height)
+        if (longEdge <= 0 || maxEdge <= 0) return 1
+        while (longEdge / (sample * 2) >= maxEdge) sample *= 2
+        return sample
     }
 
     fun send(
@@ -95,11 +136,16 @@ object MmsSender {
         image: ByteArray,
         mime: String,
         subscriptionId: Int,
-    ) {
-        val media = prepare(image, mime)
+    ): Outbound {
+        val limits = carrierLimits(manager)
+        val media = prepare(image, mime, limits.first, limits.second)
+        val wire = recipients.map { mmsWireAddress(context, it) }.filter { it.isNotEmpty() }
+        require(wire.isNotEmpty()) { "Add a recipient." }
         val req = SendReq()
-        req.prepareFromAddress(context, "", subscriptionId)
-        for (to in recipients) {
+        // SendReq already sets From to insert-address-token. The carrier writes
+        // the subscriber number. A handset number here is how a picture to
+        // yourself gets accepted and then never delivered back.
+        for (to in wire) {
             req.addTo(EncodedStringValue(to))
         }
         req.setDate(System.currentTimeMillis() / 1000)
@@ -107,28 +153,31 @@ object MmsSender {
         val mediaPart = PduPart()
         mediaPart.setContentType(media.contentType.toByteArray())
         mediaPart.setContentLocation(media.fileName.toByteArray())
-        mediaPart.setContentId("media".toByteArray())
+        mediaPart.setContentId(media.fileName.toByteArray())
         mediaPart.setName(media.fileName.toByteArray())
         mediaPart.setData(media.bytes)
         body.addPart(mediaPart)
+        val textBytes = text.toByteArray(Charsets.UTF_8)
         if (text.isNotBlank()) {
             val textPart = PduPart()
             textPart.setCharset(CharacterSets.UTF_8)
             textPart.setContentType(ContentType.TEXT_PLAIN.toByteArray())
             textPart.setContentLocation("text_0.txt".toByteArray())
-            textPart.setContentId("text".toByteArray())
+            textPart.setContentId("text_0.txt".toByteArray())
             textPart.setName("text_0.txt".toByteArray())
-            textPart.setData(text.toByteArray(Charsets.UTF_8))
+            textPart.setData(textBytes)
             body.addPart(textPart)
         }
+        val smilBytes = smilXml(text.isNotBlank(), media).toByteArray(Charsets.UTF_8)
         val smilPart = PduPart()
-        smilPart.setContentId("smil".toByteArray())
+        smilPart.setContentId("<smil>".toByteArray())
         smilPart.setContentLocation("smil.xml".toByteArray())
         smilPart.setContentType(ContentType.APP_SMIL.toByteArray())
-        smilPart.setData(smilXml(text.isNotBlank(), media).toByteArray(Charsets.UTF_8))
+        smilPart.setName("smil.xml".toByteArray())
+        smilPart.setData(smilBytes)
         body.addPart(0, smilPart)
         req.setBody(body)
-        req.setMessageSize(media.bytes.size.toLong() + text.length)
+        req.setMessageSize((media.bytes.size + textBytes.size + smilBytes.size).toLong())
         req.setMessageClass(PduHeaders.MESSAGE_CLASS_PERSONAL_STR.toByteArray())
         req.setExpiry(7 * 24 * 60 * 60)
         try {
@@ -164,10 +213,9 @@ object MmsSender {
             Intent(context, MmsSentReceiver::class.java).putExtra(MmsSentReceiver.EXTRA_ID, fileName),
             flags,
         )
-        val overrides = Bundle()
-        overrides.putBoolean(SmsManager.MMS_CONFIG_GROUP_MMS_ENABLED, false)
-        Log.i(TAG, "sending MMS pdu=${pdu.size} uri=$contentUri to=$recipients")
-        manager.sendMultimediaMessage(context, contentUri, null, overrides, sent)
+        // Null overrides keep the carrier MMSC, proxy, port, and user agent.
+        Log.i(TAG, "sending MMS pdu=${pdu.size} recipients=${wire.size} sub=$subscriptionId")
+        manager.sendMultimediaMessage(context, contentUri, null, null, sent)
         val finished = waiter.latch.await(30, TimeUnit.SECONDS)
         val code = waiter.code.get()
         Log.i(TAG, "mms finished=$finished code=$code")
@@ -177,6 +225,34 @@ object MmsSender {
         if (code != Activity.RESULT_OK) {
             throw IllegalStateException(mmsErrorMessage(code))
         }
+        return Outbound(media.bytes, media.contentType)
+    }
+
+    fun mediaBudget(manager: SmsManager): Int = carrierLimits(manager).first
+
+    private fun carrierLimits(manager: SmsManager): Pair<Int, Int> {
+        var maxBytes = 300_000
+        var maxWidth = 1024
+        var maxHeight = 1024
+        if (Build.VERSION.SDK_INT >= 28) {
+            val config = try {
+                manager.carrierConfigValues
+            } catch (_: Throwable) {
+                null
+            }
+            if (config != null) {
+                maxBytes = config.getInt(SmsManager.MMS_CONFIG_MAX_MESSAGE_SIZE, maxBytes)
+                maxWidth = config.getInt(SmsManager.MMS_CONFIG_MAX_IMAGE_WIDTH, maxWidth)
+                maxHeight = config.getInt(SmsManager.MMS_CONFIG_MAX_IMAGE_HEIGHT, maxHeight)
+            }
+        }
+        if (maxBytes <= 0) maxBytes = 300_000
+        val budget = (maxBytes - 16_384).coerceIn(20_000, 1_200_000)
+        val edge = minOf(
+            if (maxWidth > 0) maxWidth else 1024,
+            if (maxHeight > 0) maxHeight else 1024,
+        ).coerceIn(160, 2048)
+        return budget to edge
     }
 
     private fun mmsErrorMessage(code: Int): String = when (code) {
@@ -196,7 +272,11 @@ object MmsSender {
         val textRegion = if (hasText) """<region id="Text" top="70%" height="30%" fit="scroll"/>""" else ""
         val textPar = if (hasText) """<text src="text_0.txt" region="Text"/>""" else ""
         val mediaTag = """<${media.smilTag} src="${media.fileName}" region="Image"/>"""
-        val dur = if (media.smilTag == "audio") "45000ms" else "5000ms"
+        val dur = when (media.smilTag) {
+            "audio" -> "45000ms"
+            "video" -> "30000ms"
+            else -> "5000ms"
+        }
         return """<smil><head><layout>
 <root-layout width="320px" height="480px"/>
 <region id="Image" top="0" left="0" height="${if (hasText) "70%" else "100%"}" fit="meet"/>

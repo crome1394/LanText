@@ -38,6 +38,7 @@ data class MessageDto(
     val type: String,
     val status: String,
     val attachments: List<AttachmentDto> = emptyList(),
+    val simSlot: Int = -1,
 )
 
 @Serializable
@@ -87,6 +88,7 @@ data class GifHit(
     val width: Int,
     val height: Int,
     val bytes: Int,
+    val sendUrl: String = "",
 )
 
 @Serializable

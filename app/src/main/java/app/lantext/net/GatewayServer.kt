@@ -70,6 +70,28 @@ class GatewayServer(
         clientCount.value = 0
     }
 
+    private fun phoneFields(settings: app.lantext.data.AppSettings): Map<String, Any> {
+        val web = settings.phoneWeb
+        return mapOf(
+            "palette" to web.palette,
+            "mode" to web.mode,
+            "fontScale" to web.fontScale.toDouble(),
+            "striped" to web.striped,
+            "searchAtBottom" to web.searchAtBottom,
+            "enterSends" to web.enterSends,
+            "showSim" to web.showSim,
+            "detailDirection" to web.detailDirection,
+            "detailParty" to web.detailParty,
+            "detailTime" to web.detailTime,
+            "detailType" to web.detailType,
+            "detailSim" to web.detailSim,
+            "defaultSubId" to web.defaultSubId,
+            "ribbonRead" to web.ribbonRead,
+            "ribbonDelete" to web.ribbonDelete,
+            "ribbonPin" to web.ribbonPin,
+        )
+    }
+
     private inner class LanHttp(host: String, port: Int) : NanoWSD(host, port) {
         override fun serve(session: IHTTPSession): Response {
             val remote = session.headers["http-client-ip"]
@@ -128,7 +150,7 @@ class GatewayServer(
                         "paired" to (deviceFor(session) != null),
                         "gifEnabled" to settings.gifEnabled,
                         "voiceEnabled" to settings.voiceEnabled,
-                    ),
+                    ) + phoneFields(settings),
                 )
             }
 
@@ -201,7 +223,7 @@ class GatewayServer(
                                 "ok" to true,
                                 "gifEnabled" to settings.gifEnabled,
                                 "voiceEnabled" to settings.voiceEnabled,
-                            ),
+                            ) + phoneFields(settings),
                         )
                     }
                     method == Method.DELETE && uri == "/api/v1/session" -> {
@@ -219,6 +241,22 @@ class GatewayServer(
                     method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/read")) -> {
                         sms.markRead(uri.split("/")[4])
                         json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.DELETE && uri.matches(Regex("/api/v1/conversations/[^/]+/messages/[^/]+")) -> {
+                        val messageId = uri.split("/").getOrNull(6).orEmpty()
+                        if (sms.deleteMessage(messageId)) {
+                            json(Response.Status.OK, mapOf("ok" to true))
+                        } else {
+                            json(Response.Status.BAD_REQUEST, mapOf("error" to "Could not delete that message."))
+                        }
+                    }
+                    method == Method.DELETE && uri.matches(Regex("/api/v1/conversations/[^/]+")) -> {
+                        val id = uri.split("/").getOrNull(4).orEmpty()
+                        if (sms.deleteConversation(id)) {
+                            json(Response.Status.OK, mapOf("ok" to true))
+                        } else {
+                            json(Response.Status.BAD_REQUEST, mapOf("error" to "Could not delete that conversation."))
+                        }
                     }
                     method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/pin")) -> {
                         val id = uri.split("/")[4]
@@ -287,10 +325,25 @@ class GatewayServer(
                         json(Response.Status.OK, mapOf("ok" to true))
                     }
                     method == Method.GET && uri == "/api/v1/gifs" -> {
-                        if (!currentSettings().gifEnabled) {
+                        val settings = currentSettings()
+                        if (!settings.gifEnabled) {
                             json(Response.Status.FORBIDDEN, mapOf("error" to "GIF sending is turned off on the phone."))
                         } else {
-                            jsonRaw(json.encodeToString(GifSearch.search(q("q"))))
+                            jsonRaw(json.encodeToString(GifSearch.search(q("q"), settings.gifApiKey)))
+                        }
+                    }
+                    method == Method.GET && uri == "/api/v1/gif-file" -> {
+                        val target = q("u")
+                        if (!GifSearch.isAllowed(target)) {
+                            json(Response.Status.BAD_REQUEST, mapOf("error" to "That GIF source is not allowed"))
+                        } else {
+                            try {
+                                bytes(GifSearch.download(target), "image/gif")
+                            } catch (_: IllegalArgumentException) {
+                                json(Response.Status.BAD_REQUEST, mapOf("error" to "Could not load that GIF"))
+                            } catch (_: IllegalStateException) {
+                                json(Response.Status.INTERNAL_ERROR, mapOf("error" to "Could not load that GIF"))
+                            }
                         }
                     }
                     method == Method.GET && uri.matches(Regex("/api/v1/conversations/[^/]+/pdf")) -> {
@@ -321,11 +374,12 @@ class GatewayServer(
             val image = req.imageBase64?.takeIf { it.isNotBlank() }
             val settings = currentSettings()
             val mime = req.imageMime.orEmpty()
+            val sub = req.subscriptionId ?: settings.phoneWeb.defaultSubId.takeIf { it >= 0 }
             return when {
                 url != null -> {
                     require(settings.gifEnabled) { "GIF sending is turned off on the phone." }
                     val bytes = GifSearch.download(url)
-                    sms.sendMms(recipients, req.body, bytes, "image/gif", req.subscriptionId)
+                    sms.sendMms(recipients, req.body, bytes, "image/gif", sub)
                 }
                 image != null -> {
                     if (mime.contains("gif", ignoreCase = true)) {
@@ -336,9 +390,9 @@ class GatewayServer(
                     }
                     val bytes = android.util.Base64.decode(image, android.util.Base64.DEFAULT)
                     require(bytes.isNotEmpty()) { "Attachment was empty" }
-                    sms.sendMms(recipients, req.body, bytes, req.imageMime, req.subscriptionId)
+                    sms.sendMms(recipients, req.body, bytes, req.imageMime, sub)
                 }
-                else -> sms.sendSms(recipients, req.body, req.subscriptionId)
+                else -> sms.sendSms(recipients, req.body, sub)
             }
         }
 
@@ -502,13 +556,12 @@ class GatewayServer(
                 launch {
                     app.lantext.LanTextApp.instance.settings.settings.collect { s ->
                         try {
-                            send(
-                                org.json.JSONObject()
-                                    .put("type", "settings")
-                                    .put("gifEnabled", s.gifEnabled)
-                                    .put("voiceEnabled", s.voiceEnabled)
-                                    .toString(),
-                            )
+                            val event = org.json.JSONObject()
+                                .put("type", "settings")
+                                .put("gifEnabled", s.gifEnabled)
+                                .put("voiceEnabled", s.voiceEnabled)
+                            phoneFields(s).forEach { (key, value) -> event.put(key, value) }
+                            send(event.toString())
                         } catch (_: Exception) {
                         }
                     }

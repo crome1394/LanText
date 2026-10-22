@@ -18,8 +18,15 @@ import app.lantext.net.NotificationActionReceiver
 object Notifications {
     const val GATEWAY_ID = 17
     const val PAIRING_ID = 18
+    const val EXTRA_OPEN_LAN_MESSAGING = "app.lantext.OPEN_LAN_MESSAGING"
     private const val CHANNEL_GATEWAY = "gateway"
     private const val CHANNEL_PAIRING = "pairing"
+
+    private fun openHost(context: Context): Intent {
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        if (launch != null) return launch.putExtra(EXTRA_OPEN_LAN_MESSAGING, true)
+        return Intent(context, MainActivity::class.java)
+    }
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -43,7 +50,7 @@ object Notifications {
         val open = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java),
+            openHost(context),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val stop = PendingIntent.getBroadcast(
@@ -59,6 +66,7 @@ object Notifications {
                 GateReason.NO_WIFI -> context.getString(R.string.notification_no_wifi)
                 GateReason.SSID_HIDDEN -> context.getString(R.string.notification_ssid_hidden)
                 GateReason.WRONG_NETWORK -> context.getString(R.string.notification_wrong_network)
+                GateReason.MISSING_LOCAL_NETWORK_PERMISSION -> context.getString(R.string.notification_local_network)
                 else -> context.getString(R.string.notification_waiting)
             }
         }
@@ -102,7 +110,7 @@ object Notifications {
         val open = PendingIntent.getActivity(
             context,
             4,
-            Intent(context, MainActivity::class.java),
+            openHost(context),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_PAIRING)

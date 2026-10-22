@@ -45,9 +45,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         notifications = WifiGate.hasNotificationPermission(app),
         nearbyDevices = WifiGate.hasNearbyDevicesPermission(app),
         location = WifiGate.hasLocationPermission(app),
+        localNetwork = WifiGate.hasLocalNetworkPermission(app),
         nearbyDevicesRequired = Build.VERSION.SDK_INT >= 33,
         locationRequired = true,
         notificationsRequired = Build.VERSION.SDK_INT >= 33,
+        localNetworkRequired = Build.VERSION.SDK_INT >= 37,
     )
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {

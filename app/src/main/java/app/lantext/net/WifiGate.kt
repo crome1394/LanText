@@ -17,6 +17,9 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 
 object WifiGate {
+    /** Runtime permission added in Android 17. Not in the SDK 36 stub. */
+    const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
     @Volatile var lastSsid: String? = null
         private set
 
@@ -109,6 +112,7 @@ object WifiGate {
         if (!settings.enabled) return GateReason.DISABLED
         if (!hasSmsPermission(context)) return GateReason.MISSING_SMS_PERMISSION
         if (!hasNotificationPermission(context)) return GateReason.MISSING_NOTIFICATION_PERMISSION
+        if (!hasLocalNetworkPermission(context)) return GateReason.MISSING_LOCAL_NETWORK_PERMISSION
         if (settings.allowedSsids.isEmpty()) return GateReason.NO_NETWORK_SELECTED
         val ip = wifiIpv4(context)
         val ssid = currentSsid(context)
@@ -152,6 +156,18 @@ object WifiGate {
     fun hasNotificationPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < 33) return true
         return ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * Android 17 blocks inbound LAN sockets until this is granted. A denied
+     * app still answers ping, and the browser connection to the listen port
+     * times out. Older releases keep the implicit grant that comes with
+     * [android.Manifest.permission.INTERNET].
+     */
+    fun hasLocalNetworkPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 37) return true
+        return ContextCompat.checkSelfPermission(context, PERMISSION_ACCESS_LOCAL_NETWORK) ==
             PackageManager.PERMISSION_GRANTED
     }
 

@@ -10,6 +10,14 @@ The F-Droid / Play-style “what's new” text for each Android `versionCode` li
 
 ## [Unreleased]
 
+### Fixed
+
+- On Android 17, ask for local network access and keep the listener stopped
+  until it is granted. Without that permission the phone still answers ping,
+  but a browser connection to the listen port times out.
+- GIF tiles in the computer inbox load through the phone, so the browser can show them.
+- A text or picture sent from the computer inbox is saved in the conversation.
+
 ## [0.2.5] — 2026-09-05
 
 Sideload build for testers.

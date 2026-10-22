@@ -59,6 +59,8 @@ if you change branding.
 
 **Location and Nearby devices.** `ACCESS_FINE_LOCATION` and (on Android 13+)
 `NEARBY_WIFI_DEVICES` are requested so the OS will reveal the current SSID.
+On Android 17, `ACCESS_LOCAL_NETWORK` is requested so a computer on that
+Wi-Fi can open the inbox.
 LanText does not scan for headphones or other phones, and it does not read
 GPS. The allowlist comparison happens on device. This should **not** be tagged
 as a tracking Anti-Feature; the store description states the rationale.

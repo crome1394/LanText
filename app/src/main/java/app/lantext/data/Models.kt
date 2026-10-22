@@ -16,6 +16,8 @@ data class AppSettings(
     val gifEnabled: Boolean = true,
     val voiceEnabled: Boolean = true,
     val pinnedThreadIds: Set<String> = emptySet(),
+    val gifApiKey: String = "",
+    val phoneWeb: PhoneWeb = PhoneWeb(),
 ) {
     companion object {
         const val DEFAULT_PORT = 8743
@@ -39,6 +41,26 @@ data class PendingPairing(
     val createdAt: Long,
 )
 
+@Serializable
+data class PhoneWeb(
+    val palette: String = "",
+    val mode: String = "",
+    val fontScale: Float = 1f,
+    val striped: Boolean = false,
+    val searchAtBottom: Boolean = false,
+    val enterSends: Boolean = false,
+    val showSim: Boolean = true,
+    val detailDirection: Boolean = true,
+    val detailParty: Boolean = true,
+    val detailTime: Boolean = true,
+    val detailType: Boolean = true,
+    val detailSim: Boolean = true,
+    val defaultSubId: Int = -1,
+    val ribbonRead: Boolean = true,
+    val ribbonDelete: Boolean = true,
+    val ribbonPin: Boolean = true,
+)
+
 enum class GateReason {
     DISABLED,
     NO_NETWORK_SELECTED,
@@ -47,6 +69,7 @@ enum class GateReason {
     SSID_HIDDEN,
     MISSING_SMS_PERMISSION,
     MISSING_NOTIFICATION_PERMISSION,
+    MISSING_LOCAL_NETWORK_PERMISSION,
     LISTENING,
 }
 
@@ -59,11 +82,14 @@ data class PermissionState(
     val nearbyDevicesRequired: Boolean = false,
     val locationRequired: Boolean = false,
     val notificationsRequired: Boolean = false,
+    val localNetwork: Boolean = false,
+    val localNetworkRequired: Boolean = false,
 ) {
     val allGranted: Boolean
         get() = sms && contacts && notifications &&
             (!nearbyDevicesRequired || nearbyDevices) &&
-            (!locationRequired || location)
+            (!locationRequired || location) &&
+            (!localNetworkRequired || localNetwork)
 }
 
 data class GatewaySnapshot(

@@ -20,6 +20,14 @@ class WebAssetsTest {
     }
 
     @Test
+    fun gifPreviewsStayOnThePhone() {
+        val js = webAsset("app.js").readText()
+        assertTrue(js.contains("function gifFileSrc"))
+        assertTrue(js.contains("/api/v1/gif-file?u="))
+        assertTrue(!js.contains("src=\"\${escapeHtml(hit.url)}\""))
+    }
+
+    @Test
     fun threadHeaderLabels() {
         val html = webAsset("index.html").readText()
         assertTrue(html.contains(">Copy Number<"))

@@ -141,6 +141,16 @@ let overlayTimer = null;
 const OVERLAY_GRACE_MS = 20000;
 let pairingInFlight = false;
 let gifEnabled = true;
+let enterSends = true;
+let phoneSubId = -1;
+const phoneDetails = {
+  direction: false,
+  party: false,
+  time: true,
+  type: false,
+  sim: false,
+  showSim: false,
+};
 let voiceEnabled = true;
 
 function setPairStatus(msg) {
@@ -270,15 +280,84 @@ function applyExperimental(src) {
         : voiceEnabled ? "Message or voice note"
           : "Message";
   }
+  applyPhoneSettings(src);
+  updateComposeHint();
+}
+function updateComposeHint() {
   const hint = document.querySelector(".compose-hint");
-  if (hint) {
-    const extra = gifEnabled && voiceEnabled ? "GIF or 🎤 for MMS · "
-      : gifEnabled ? "GIF for MMS · "
-        : voiceEnabled ? "🎤 for MMS · "
-          : "";
-    hint.textContent = "Enter to send · :lol then Tab · " + extra + "Shift+Enter for a new line";
+  if (!hint) return;
+  const extra = gifEnabled && voiceEnabled ? "GIF or 🎤 for MMS · "
+    : gifEnabled ? "GIF for MMS · "
+      : voiceEnabled ? "🎤 for MMS · "
+        : "";
+  const enter = enterSends ? "Enter to send · " : "Ctrl+Enter to send · ";
+  const line = enterSends ? "Shift+Enter for a new line" : "Enter for a new line";
+  hint.textContent = enter + ":lol then Tab · " + extra + line;
+  if (composeText) {
+    composeText.title = enterSends
+      ? "Enter to send, Shift+Enter for a new line"
+      : "Enter for a new line, Ctrl+Enter to send";
+  }
+  if (newBody) {
+    newBody.placeholder = enterSends
+      ? "Message (Enter to send, paste a picture or GIF)"
+      : "Message (Ctrl+Enter to send, paste a picture or GIF)";
+  }
+  const sendBtn = document.getElementById("send-btn");
+  if (sendBtn) sendBtn.title = enterSends ? "Send (Enter)" : "Send (Ctrl+Enter)";
+  const helpRows = document.querySelectorAll("#help-modal .keys tr td:last-child");
+  if (helpRows.length >= 3) {
+    helpRows[0].textContent = enterSends ? "Send message" : "New line";
+    helpRows[1].textContent = "New line";
+    helpRows[2].textContent = enterSends ? "Send (same as Enter)" : "Send message";
   }
 }
+
+function applyPhoneSettings(src) {
+  if (!src || typeof src.palette !== "string" || !src.palette) return;
+  if (typeof src.enterSends === "boolean") enterSends = src.enterSends;
+  if (typeof src.defaultSubId === "number") phoneSubId = src.defaultSubId;
+  phoneDetails.direction = !!src.detailDirection;
+  phoneDetails.party = !!src.detailParty;
+  phoneDetails.time = src.detailTime !== false;
+  phoneDetails.type = !!src.detailType;
+  phoneDetails.sim = !!src.detailSim;
+  phoneDetails.showSim = !!src.showSim;
+  const scale = typeof src.fontScale === "number" ? Math.min(1.4, Math.max(0.85, src.fontScale)) : 1;
+  document.documentElement.style.fontSize = (scale * 100) + "%";
+  document.body.classList.toggle("striped", !!src.striped);
+  document.body.classList.toggle("search-bottom", !!src.searchAtBottom);
+  const readBtn = document.getElementById("read-btn");
+  const deleteBtn = document.getElementById("delete-thread-btn");
+  const pinBtn = document.getElementById("pin-btn");
+  const menuRead = document.getElementById("convo-menu-read");
+  const menuDelete = document.getElementById("convo-menu-delete");
+  const menuPin = document.getElementById("convo-menu-pin");
+  if (typeof src.ribbonRead === "boolean" && readBtn && menuRead) {
+    readBtn.hidden = !src.ribbonRead;
+    menuRead.hidden = !src.ribbonRead;
+  }
+  if (typeof src.ribbonDelete === "boolean" && deleteBtn && menuDelete) {
+    deleteBtn.hidden = !src.ribbonDelete;
+    menuDelete.hidden = !src.ribbonDelete;
+  }
+  if (typeof src.ribbonPin === "boolean" && pinBtn && menuPin) {
+    pinBtn.hidden = !src.ribbonPin;
+    menuPin.hidden = !src.ribbonPin;
+  }
+  const note = document.querySelector("#theme-modal .muted");
+  if (note) note.textContent = "This follows Appearance on the phone. A change here updates the phone.";
+  applyingPhone = true;
+  localStorage.setItem(THEME_PALETTE_KEY, src.palette);
+  if (src.mode === "light" || src.mode === "dark" || src.mode === "auto") {
+    localStorage.setItem(THEME_MODE_KEY, src.mode);
+  }
+  applyTheme();
+  applyingPhone = false;
+  if (openMessages.length) renderMessages(openMessages, { keepScroll: true });
+}
+let applyingPhone = false;
+let openMessages = [];
 
 function isGifFile(file) {
   return !!file && ((file.type || "") === "image/gif" || /\.gif$/i.test(file.name || ""));
@@ -316,7 +395,7 @@ function applyTheme() {
   root.dataset.mode = mode;
   root.dataset.resolved = resolvedMode(mode);
   syncThemeControls();
-  if (appearanceReady) syncAppearance();
+  if (appearanceReady && !applyingPhone) syncAppearance();
 }
 let appearanceReady = false;
 function syncAppearance() {
@@ -682,7 +761,11 @@ async function loadInbox(opts = {}) {
   updateTitle();
   renderConversations(searchInput.value);
   saveInboxSnapshot();
-  if (selectedId) await openThread(selectedId, false);
+  if (selectedId && !conversations.some((c) => c.id === selectedId)) {
+    closeOpenThread();
+  } else if (selectedId) {
+    await openThread(selectedId, false);
+  }
 }
 
 function updateTitle() {
@@ -833,7 +916,10 @@ async function openThread(id, mark) {
   composeText.focus();
 }
 
-function renderMessages(msgs) {
+function renderMessages(msgs, opts) {
+  openMessages = msgs || [];
+  const keepScroll = !!(opts && opts.keepScroll);
+  const prevScroll = messagesEl.scrollTop;
   messagesEl.innerHTML = "";
   let lastDay = "";
   for (const m of msgs) {
@@ -856,11 +942,29 @@ function renderMessages(msgs) {
       }
     }
     html += linkify(m.body || "");
-    html += `<div class="meta">${formatTime(m.timestamp)}</div>`;
+    const meta = messageMeta(m);
+    if (meta) html += `<div class="meta">${escapeHtml(meta)}</div>`;
     b.innerHTML = html;
+    if (m.id) {
+      b.dataset.id = m.id;
+      b.title = "Right-click to delete this message";
+      b.addEventListener("contextmenu", (e) => showMessageMenu(e, m.id));
+    }
     messagesEl.appendChild(b);
   }
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  messagesEl.scrollTop = keepScroll ? prevScroll : messagesEl.scrollHeight;
+}
+function messageMeta(m) {
+  const parts = [];
+  if (phoneDetails.direction) parts.push(m.incoming ? "Received" : "Sent");
+  if (phoneDetails.party) parts.push(m.incoming ? (m.displayName || "") : "You");
+  if (phoneDetails.time) parts.push(formatTime(m.timestamp));
+  if (phoneDetails.type) parts.push((m.type || "sms").toUpperCase());
+  const slot = Number(m.simSlot);
+  if ((phoneDetails.showSim || phoneDetails.sim) && Number.isInteger(slot) && slot >= 0) {
+    parts.push("SIM " + (slot + 1));
+  }
+  return parts.filter(Boolean).join(" · ");
 }
 
 const lightbox = document.getElementById("lightbox");
@@ -987,7 +1091,8 @@ async function searchGifs(q) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.title = hit.title || "";
-      btn.innerHTML = `<img alt="" src="${escapeHtml(hit.url)}" />`;
+      btn.innerHTML = `<img alt="" src="${escapeHtml(gifFileSrc(hit.url))}" />`;
+      btn.dataset.send = hit.sendUrl || hit.url;
       btn.addEventListener("click", () => pickGif(hit));
       gifGrid.appendChild(btn);
     }
@@ -1024,25 +1129,35 @@ function bindGifHover() {
     hoverImg.removeAttribute("src");
   });
 }
+function gifSendUrl(hit) {
+  return (hit && (hit.sendUrl || hit.url)) || "";
+}
+function gifFileSrc(url) {
+  if (!url) return "";
+  if (url.charAt(0) === "/") return url;
+  return "/api/v1/gif-file?u=" + encodeURIComponent(url);
+}
 function pickGif(hit) {
   if (!gifEnabled) return;
+  const send = gifSendUrl(hit);
+  const preview = gifFileSrc(hit.url || send);
   const fileish = { name: (hit.title || "gif") + ".gif", type: "image/gif" };
   if (!newModal.hidden) {
-    pendingNewGifUrl = hit.url;
+    pendingNewGifUrl = send;
     pendingNewImage = null;
     renderPreview(newPendingPreview, fileish, () => {
       pendingNewGifUrl = null;
       newPendingPreview.hidden = true;
       newPendingPreview.innerHTML = "";
-    }, hit.url);
+    }, preview);
   } else {
-    pendingGifUrl = hit.url;
+    pendingGifUrl = send;
     pendingImage = null;
     renderPreview(pendingPreview, fileish, () => {
       pendingGifUrl = null;
       pendingPreview.hidden = true;
       pendingPreview.innerHTML = "";
-    }, hit.url);
+    }, preview);
   }
   gifPanel.hidden = true;
 }
@@ -1364,16 +1479,86 @@ function hideConvoMenu() {
 function showConvoMenu(e, id) {
   e.preventDefault();
   e.stopPropagation();
+  hideMessageMenu();
   if (!convoMenu) return;
   menuThreadId = id;
   const convo = conversations.find((c) => c.id === id);
   const pinBtn = document.getElementById("convo-menu-pin");
   if (pinBtn) pinBtn.textContent = convo && convo.pinned ? "Unpin conversation" : "Pin conversation";
   convoMenu.hidden = false;
-  const x = Math.min(e.clientX, window.innerWidth - 208);
-  const y = Math.min(e.clientY, window.innerHeight - 56);
+  const x = Math.min(e.clientX, window.innerWidth - 220);
+  const y = Math.min(e.clientY, window.innerHeight - 148);
   convoMenu.style.left = x + "px";
   convoMenu.style.top = y + "px";
+}
+function closeOpenThread() {
+  appView.classList.remove("thread-open");
+  selectedId = null;
+  if (emptyThread) emptyThread.hidden = false;
+  if (threadPanel) threadPanel.hidden = true;
+  if (messagesEl) messagesEl.innerHTML = "";
+}
+async function markConversationRead(id) {
+  if (!id) return;
+  hideConvoMenu();
+  const convo = conversations.find((c) => c.id === id);
+  if (convo) convo.unread = 0;
+  renderConversations(searchInput.value);
+  updateTitle();
+  try {
+    await api("/api/v1/conversations/" + encodeURIComponent(id) + "/read", { method: "POST" });
+  } catch (err) {
+    alert(err.message || "Could not mark as read.");
+    loadInbox().catch(() => {});
+  }
+}
+async function deleteConversation(id) {
+  if (!id) return;
+  hideConvoMenu();
+  if (!window.confirm("Delete this conversation and its messages from the phone?")) return;
+  try {
+    await api("/api/v1/conversations/" + encodeURIComponent(id), { method: "DELETE" });
+  } catch (err) {
+    alert(err.message || "Could not delete that conversation.");
+    return;
+  }
+  conversations = conversations.filter((c) => c.id !== id);
+  sortConversations();
+  renderConversations(searchInput.value);
+  updateTitle();
+  if (selectedId === id) closeOpenThread();
+}
+const messageMenu = document.getElementById("message-menu");
+let menuMessageId = null;
+function hideMessageMenu() {
+  if (messageMenu) messageMenu.hidden = true;
+  menuMessageId = null;
+}
+function showMessageMenu(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideConvoMenu();
+  if (!messageMenu || !id) return;
+  menuMessageId = id;
+  messageMenu.hidden = false;
+  const x = Math.min(e.clientX, window.innerWidth - 200);
+  const y = Math.min(e.clientY, window.innerHeight - 64);
+  messageMenu.style.left = x + "px";
+  messageMenu.style.top = y + "px";
+}
+async function deleteMessage(id) {
+  if (!selectedId || !id) return;
+  if (!window.confirm("Delete this message from the phone?")) return;
+  try {
+    await api(
+      "/api/v1/conversations/" + encodeURIComponent(selectedId) + "/messages/" + encodeURIComponent(id),
+      { method: "DELETE" },
+    );
+  } catch (err) {
+    alert(err.message || "Could not delete that message.");
+    return;
+  }
+  await openThread(selectedId, false);
 }
 if (document.getElementById("convo-menu-pin")) {
   document.getElementById("convo-menu-pin").addEventListener("click", (e) => {
@@ -1383,8 +1568,36 @@ if (document.getElementById("convo-menu-pin")) {
     if (id) setPinned(id, !(convo && convo.pinned));
   });
 }
-document.addEventListener("click", hideConvoMenu);
-document.addEventListener("scroll", hideConvoMenu, true);
+on("convo-menu-read", "click", (e) => {
+  e.stopPropagation();
+  const id = menuThreadId;
+  if (id) markConversationRead(id);
+});
+on("convo-menu-delete", "click", (e) => {
+  e.stopPropagation();
+  const id = menuThreadId;
+  if (id) deleteConversation(id);
+});
+on("message-menu-delete", "click", (e) => {
+  e.stopPropagation();
+  const id = menuMessageId;
+  hideMessageMenu();
+  if (id) deleteMessage(id);
+});
+on("read-btn", "click", () => {
+  if (selectedId) markConversationRead(selectedId);
+});
+on("delete-thread-btn", "click", () => {
+  if (selectedId) deleteConversation(selectedId);
+});
+document.addEventListener("click", () => {
+  hideConvoMenu();
+  hideMessageMenu();
+});
+document.addEventListener("scroll", () => {
+  hideConvoMenu();
+  hideMessageMenu();
+}, true);
 on("pin-btn", "click", () => {
   const convo = conversations.find((c) => c.id === selectedId);
   if (!convo) return;
@@ -1516,7 +1729,9 @@ async function fileToBase64(file) {
 }
 
 function wantsSend(e) {
-  return e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229;
+  if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return false;
+  if (enterSends) return !e.shiftKey;
+  return e.ctrlKey || e.metaKey;
 }
 
 composeText.addEventListener("keydown", (e) => {
@@ -1552,6 +1767,7 @@ composeForm.addEventListener("submit", async (e) => {
     const dest = (convo?.recipients || []).filter(Boolean);
     const recipients = dest.length ? dest : [convo?.address].filter(Boolean);
     const payload = { body, recipients };
+    if (phoneSubId >= 0) payload.subscriptionId = phoneSubId;
     if (pendingGifUrl) {
       payload.mediaUrl = pendingGifUrl;
     } else if (pendingImage) {
@@ -1671,6 +1887,7 @@ newForm.addEventListener("submit", async (e) => {
   if (!number || (!body && !pendingNewImage && !pendingNewGifUrl)) return;
   try {
     const payload = { recipients: [number], body };
+    if (phoneSubId >= 0) payload.subscriptionId = phoneSubId;
     if (pendingNewGifUrl) {
       payload.mediaUrl = pendingNewGifUrl;
     } else if (pendingNewImage) {

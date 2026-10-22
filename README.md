@@ -70,7 +70,8 @@ trusted.
 1. Install LanText on Android 8 or newer.
 2. Grant SMS, contacts, notifications, and Nearby devices (Android 12 and
    older also need location — **only** so the OS will reveal the Wi-Fi name,
-   not GPS).
+   not GPS). Android 17 also asks for local network access; without it the
+   phone answers ping and the browser never connects.
 3. Add your home Wi-Fi to the allowlist and turn web access on.
 4. On a computer on that same network, open the HTTPS URL shown in the app
    (the phone's current Wi-Fi IPv4, or scan the QR code).
