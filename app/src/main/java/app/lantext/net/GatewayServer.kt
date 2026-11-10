@@ -179,10 +179,7 @@ class GatewayServer(
                         val token = pairing.consumeApprovedToken(id)
                             ?: return json(Response.Status.NOT_FOUND, mapOf("status" to "unknown"))
                         val res = json(Response.Status.OK, mapOf("status" to "approved", "token" to token))
-                        res.addHeader(
-                            "Set-Cookie",
-                            "$COOKIE=$token; Path=/; Max-Age=34560000; Secure; HttpOnly; SameSite=Strict",
-                        )
+                        res.addHeader("Set-Cookie", sessionCookie(token))
                         res
                     }
                     PairingManager.PairStatus.UNKNOWN ->
@@ -193,7 +190,7 @@ class GatewayServer(
             if (uri.startsWith("/api/v1/") && uri != "/api/v1/events") {
                 val device = deviceFor(session) ?: return json(Response.Status.UNAUTHORIZED, mapOf("error" to "unpaired"))
                 kotlinx.coroutines.runBlocking { pairing.touch(device.id) }
-                return api(session, uri, method)
+                return rememberBrowserSession(session, api(session, uri, method))
             }
 
             if (method == Method.GET && !uri.startsWith("/api/")) {
@@ -402,12 +399,17 @@ class GatewayServer(
         }
 
         private fun deviceFor(session: IHTTPSession): PairedDevice? {
-            val header = session.headers["authorization"]
-            val token = when {
-                header != null && header.startsWith("Bearer ", true) -> header.removePrefix("Bearer ").trim()
-                else -> cookie(session, COOKIE)
-            }
+            val token = presentedToken(session.headers)
             return token?.let { kotlinx.coroutines.runBlocking { pairing.deviceForToken(it) } }
+        }
+
+        private fun rememberBrowserSession(session: IHTTPSession, response: Response): Response {
+            val header = session.headers["authorization"] ?: return response
+            if (!header.startsWith("Bearer ", ignoreCase = true)) return response
+            val bearer = header.substring("Bearer ".length).trim()
+            if (bearer.isEmpty() || cookie(session, COOKIE) == bearer) return response
+            response.addHeader("Set-Cookie", sessionCookie(bearer))
+            return response
         }
 
         private fun cookie(session: IHTTPSession, name: String): String? {
@@ -524,15 +526,7 @@ class GatewayServer(
         private var counted = false
 
         override fun onOpen() {
-            val header = handshakeRequest.headers["authorization"]
-            val cookie = handshakeRequest.headers["cookie"].orEmpty()
-            val qp = handshakeRequest.parameters["token"]?.firstOrNull()
-            val token = when {
-                qp != null -> qp
-                header != null && header.startsWith("Bearer ", true) -> header.removePrefix("Bearer ").trim()
-                else -> cookie.split(';').map { it.trim() }
-                    .firstOrNull { it.startsWith("$COOKIE=") }?.substringAfter("=")
-            }
+            val token = presentedToken(handshakeRequest.headers)
             val device = token?.let { kotlinx.coroutines.runBlocking { pairing.deviceForToken(it) } }
             if (device == null) {
                 close(NanoWSD.WebSocketFrame.CloseCode.PolicyViolation, "unpaired", false)
@@ -592,5 +586,21 @@ class GatewayServer(
     companion object {
         const val COOKIE = "lt_session"
         private const val PING_INTERVAL_MS = 120_000L
+
+        internal fun presentedToken(headers: Map<String, String>?): String? {
+            val header = headers?.get("authorization")
+            if (header != null && header.startsWith("Bearer ", ignoreCase = true)) {
+                return header.substring("Bearer ".length).trim().ifBlank { null }
+            }
+            return headers?.get("cookie").orEmpty()
+                .split(';')
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("$COOKIE=") }
+                ?.substringAfter("=")
+                ?.ifBlank { null }
+        }
+
+        internal fun sessionCookie(token: String): String =
+            "$COOKIE=$token; Path=/; Max-Age=34560000; Secure; HttpOnly; SameSite=Strict"
     }
 }

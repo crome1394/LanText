@@ -1913,8 +1913,7 @@ function connectEvents() {
   const gen = ++eventGen;
   if (socket) try { socket.close(); } catch (_) {}
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const q = token ? ("?token=" + encodeURIComponent(token)) : "";
-  socket = new WebSocket(proto + "//" + location.host + "/api/v1/events" + q);
+  socket = new WebSocket(proto + "//" + location.host + "/api/v1/events");
   socket.onopen = () => {
     if (gen !== eventGen) return;
     const recovered = !phoneReachable;
