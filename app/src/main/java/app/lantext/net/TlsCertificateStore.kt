@@ -38,7 +38,9 @@ class TlsCertificateStore internal constructor(
             }
             return existing
         }
-        if (storeFile.exists()) return null
+        // A saved certificate that cannot be opened would leave the inbox stopped.
+        // Replace it so the server can start. The browser accepts the new certificate once.
+        if (storeFile.exists()) return regenerate(bindIp)
         return generate(bindIp)
     }
 
@@ -54,11 +56,50 @@ class TlsCertificateStore internal constructor(
     private fun load(): KeyStore? {
         cached?.let { return it }
         if (!storeFile.exists()) return null
-        val wrapped = passwords.read() ?: return null
-        open(storeFile, wrapped)?.let { ks ->
-            if (keyUnlocks(ks, wrapped)) return accept(ks, wrapped)
+        val wrapped = passwords.read()
+        if (wrapped != null) {
+            open(storeFile, wrapped)?.let { ks ->
+                if (keyUnlocks(ks, wrapped)) return accept(ks, wrapped)
+                if (keyUnlocks(ks, LEGACY_STORE_PASSWORD)) return reprotect(ks, LEGACY_STORE_PASSWORD)
+            }
+        }
+        open(storeFile, LEGACY_STORE_PASSWORD)?.let { ks ->
+            if (keyUnlocks(ks, LEGACY_STORE_PASSWORD)) return reprotect(ks, LEGACY_STORE_PASSWORD)
         }
         return null
+    }
+
+    private fun reprotect(ks: KeyStore, currentPassword: CharArray): KeyStore {
+        val next = randomPassword()
+        val pending = File(dir, storeFile.name + ".new")
+        return try {
+            rekey(ks, currentPassword, next)
+            pending.outputStream().use { ks.store(it, next) }
+            val staged = open(pending, next)
+            if (staged == null || !keyUnlocks(staged, next)) {
+                pending.delete()
+                rekey(ks, next, currentPassword)
+                Log.e(TAG, "Could not wrap the computer inbox certificate password")
+                return accept(ks, currentPassword)
+            }
+            passwords.write(next)
+            replace(pending, storeFile)
+            val reloaded = open(storeFile, next)
+            if (reloaded == null || !keyUnlocks(reloaded, next)) {
+                Log.e(TAG, "Could not reopen the computer inbox certificate")
+                return accept(ks, next)
+            }
+            accept(reloaded, next)
+        } catch (t: Exception) {
+            pending.delete()
+            Log.e(TAG, "Could not wrap the computer inbox certificate password", t)
+            if (keyUnlocks(ks, next)) accept(ks, next) else accept(ks, currentPassword)
+        }
+    }
+
+    private fun rekey(ks: KeyStore, currentPassword: CharArray, next: CharArray) {
+        val key = ks.getKey(ALIAS, currentPassword) as java.security.PrivateKey
+        ks.setKeyEntry(ALIAS, key, next, ks.getCertificateChain(ALIAS))
     }
 
     private fun keyUnlocks(ks: KeyStore, pass: CharArray): Boolean {
@@ -157,6 +198,9 @@ class TlsCertificateStore internal constructor(
     companion object {
         const val ALIAS = "lantext"
         private const val TAG = "LanText"
+
+        /** Opens a store written before the password was wrapped. Already present in older public commits. */
+        internal val LEGACY_STORE_PASSWORD: CharArray = "lantext-local".toCharArray()
 
         /** DNS names from a certificate SAN list. The type is a Java Integer, not a Kotlin Int. */
         fun dnsNamesFromSan(rows: Collection<*>?): List<String> {
