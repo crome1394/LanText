@@ -18,6 +18,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
 
     <uses-feature
@@ -106,7 +107,7 @@
         <provider
             android:name="com.klinker.android.send_message.MmsFileProvider"
             android:authorities="${applicationId}.MmsFileProvider"
-            android:exported="true"
+            android:exported="false"
             android:grantUriPermissions="true" />
     </application>
 </manifest>
