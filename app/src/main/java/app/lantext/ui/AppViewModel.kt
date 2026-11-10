@@ -100,6 +100,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         app.pairing.deny(id)
     }
 
+    fun rename(id: String, label: String) = viewModelScope.launch {
+        app.pairing.rename(id, label)
+    }
+
     fun revoke(id: String) = viewModelScope.launch {
         app.pairing.revoke(id)
     }

@@ -57,7 +57,6 @@ const gifPanel = document.getElementById("gif-panel");
 const gifSearch = document.getElementById("gif-search");
 const gifGrid = document.getElementById("gif-grid");
 const gifStatus = document.getElementById("gif-status");
-const voiceBtn = document.getElementById("voice-btn");
 const EMOJI = [
   { glyph: "😂", names: ["lol", "joy", "laugh"] },
   { glyph: "🤣", names: ["rofl", "rolling"] },
@@ -120,11 +119,14 @@ const EMOJI = [
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let conversations = [];
 let selectedId = null;
+let threadLoadGen = 0;
+let threadHasMore = false;
+let threadPaging = false;
+let threadUserMoved = false;
 let pendingImage = null;
 let pendingNewImage = null;
 let pendingGifUrl = null;
 let pendingNewGifUrl = null;
-let voiceRec = null;
 let selectedContact = null;
 let selectedExistingContact = null;
 let contactSaveMode = "new";
@@ -143,6 +145,7 @@ let pairingInFlight = false;
 let gifEnabled = true;
 let enterSends = true;
 let phoneSubId = -1;
+let inboxGroup = "none";
 const phoneDetails = {
   direction: false,
   party: false,
@@ -151,7 +154,8 @@ const phoneDetails = {
   sim: false,
   showSim: false,
 };
-let voiceEnabled = true;
+let folder = "inbox";
+let folders = { archivedIds: [], trash: [], blocked: [], scheduled: [] };
 
 function setPairStatus(msg) {
   if (pairStatus) pairStatus.textContent = msg || "";
@@ -177,6 +181,35 @@ async function pollPair(requestId) {
   return null;
 }
 
+function guessDeviceName(ua) {
+  const raw = ua || "";
+  let browser = "Browser";
+  if (/Edg\/|Edge\//.test(raw)) browser = "Edge";
+  else if (/OPR\/|Opera/.test(raw)) browser = "Opera";
+  else if (/Firefox\//.test(raw)) browser = "Firefox";
+  else if (/CriOS\/|Chrome\//.test(raw)) browser = "Chrome";
+  else if (/Safari\//.test(raw)) browser = "Safari";
+  let os = "";
+  if (/Windows/.test(raw)) os = "Windows";
+  else if (/Android/.test(raw)) os = "Android";
+  else if (/CrOS/.test(raw)) os = "ChromeOS";
+  else if (/iPad/.test(raw)) os = "iPad";
+  else if (/iPhone/.test(raw)) os = "iPhone";
+  else if (/Mac OS|Macintosh/.test(raw)) os = "Mac";
+  else if (/Linux/.test(raw)) os = "Linux";
+  return (os ? browser + " on " + os : browser).slice(0, 80);
+}
+
+const deviceNameInput = document.getElementById("device-name");
+if (deviceNameInput && !deviceNameInput.value.trim()) {
+  deviceNameInput.value = guessDeviceName(navigator.userAgent);
+}
+
+function deviceName() {
+  const typed = deviceNameInput && deviceNameInput.value ? deviceNameInput.value.trim() : "";
+  return (typed || guessDeviceName(navigator.userAgent)).slice(0, 80);
+}
+
 async function startPair(e) {
   if (e) e.preventDefault();
   if (pairingInFlight) return;
@@ -193,7 +226,7 @@ async function startPair(e) {
     const started = await fetch("/api/v1/pair", {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=UTF-8" },
-      body: JSON.stringify({ pin, clientName: navigator.userAgent.slice(0, 60) }),
+      body: JSON.stringify({ pin, clientName: deviceName() }),
       credentials: "include",
       signal: AbortSignal.timeout(15000),
     });
@@ -238,58 +271,38 @@ if (pairForm) pairForm.addEventListener("submit", startPair);
 function applyExperimental(src) {
   if (!src) return;
   if (typeof src.gifEnabled === "boolean") gifEnabled = src.gifEnabled;
-  if (typeof src.voiceEnabled === "boolean") voiceEnabled = src.voiceEnabled;
   if (gifBtn) gifBtn.hidden = !gifEnabled;
   const newGif = document.getElementById("new-gif-btn");
   if (newGif) newGif.hidden = !gifEnabled;
-  if (voiceBtn) voiceBtn.hidden = !voiceEnabled;
-  const newVoice = document.getElementById("new-voice-btn");
-  if (newVoice) newVoice.hidden = !voiceEnabled;
   if (!gifEnabled && gifPanel) gifPanel.hidden = true;
   if (!gifEnabled) {
     pendingGifUrl = null;
     pendingNewGifUrl = null;
   }
-  if (!voiceEnabled && voiceRec) voiceRec.stop();
-  if (!voiceEnabled) {
-    if (pendingImage && (pendingImage.type || "").startsWith("audio/")) {
-      pendingImage = null;
-      if (pendingPreview) { pendingPreview.hidden = true; pendingPreview.innerHTML = ""; }
-    }
-    if (pendingNewImage && (pendingNewImage.type || "").startsWith("audio/")) {
-      pendingNewImage = null;
-      if (newPendingPreview) { newPendingPreview.hidden = true; newPendingPreview.innerHTML = ""; }
-    }
+  if (pendingImage && isAudioFile(pendingImage)) {
+    pendingImage = null;
+    if (pendingPreview) { pendingPreview.hidden = true; pendingPreview.innerHTML = ""; }
   }
-  const accept = [];
-  if (gifEnabled) {
-    accept.push("image/*", ".gif");
-  } else {
-    accept.push("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif");
+  if (pendingNewImage && isAudioFile(pendingNewImage)) {
+    pendingNewImage = null;
+    if (newPendingPreview) { newPendingPreview.hidden = true; newPendingPreview.innerHTML = ""; }
   }
-  if (voiceEnabled) accept.push("audio/*");
+  const accept = gifEnabled
+    ? ["image/*", ".gif"]
+    : ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
   const acceptStr = accept.join(",");
   if (fileInput) fileInput.accept = acceptStr;
   if (newFileInput) newFileInput.accept = acceptStr;
   const attach = document.getElementById("attach-btn");
   if (attach) attach.title = gifEnabled ? "Attach a picture or GIF" : "Attach a picture";
-  if (composeText) {
-    composeText.placeholder = gifEnabled && voiceEnabled
-      ? "Message, GIF, or voice note"
-      : gifEnabled ? "Message or GIF"
-        : voiceEnabled ? "Message or voice note"
-          : "Message";
-  }
+  if (composeText) composeText.placeholder = gifEnabled ? "Message or GIF" : "Message";
   applyPhoneSettings(src);
   updateComposeHint();
 }
 function updateComposeHint() {
   const hint = document.querySelector(".compose-hint");
   if (!hint) return;
-  const extra = gifEnabled && voiceEnabled ? "GIF or 🎤 for MMS · "
-    : gifEnabled ? "GIF for MMS · "
-      : voiceEnabled ? "🎤 for MMS · "
-        : "";
+  const extra = gifEnabled ? "GIF for MMS · " : "";
   const enter = enterSends ? "Enter to send · " : "Ctrl+Enter to send · ";
   const line = enterSends ? "Shift+Enter for a new line" : "Enter for a new line";
   hint.textContent = enter + ":lol then Tab · " + extra + line;
@@ -314,7 +327,15 @@ function updateComposeHint() {
 }
 
 function applyPhoneSettings(src) {
-  if (!src || typeof src.palette !== "string" || !src.palette) return;
+  if (!src) return;
+  if (typeof src.launcherIcon === "string" && src.launcherIcon) applyLauncherIcon(src.launcherIcon);
+  if (typeof src.inboxGroup === "string") {
+    const next = inboxGroupMode(src.inboxGroup);
+    const changed = next !== inboxGroup;
+    inboxGroup = next;
+    if (changed && conversations.length) renderConversations(searchInput ? searchInput.value : "");
+  }
+  if (typeof src.palette !== "string" || !src.palette) return;
   if (typeof src.enterSends === "boolean") enterSends = src.enterSends;
   if (typeof src.defaultSubId === "number") phoneSubId = src.defaultSubId;
   phoneDetails.direction = !!src.detailDirection;
@@ -329,7 +350,6 @@ function applyPhoneSettings(src) {
   document.body.classList.toggle("search-bottom", !!src.searchAtBottom);
   const readBtn = document.getElementById("read-btn");
   const deleteBtn = document.getElementById("delete-thread-btn");
-  const pinBtn = document.getElementById("pin-btn");
   const menuRead = document.getElementById("convo-menu-read");
   const menuDelete = document.getElementById("convo-menu-delete");
   const menuPin = document.getElementById("convo-menu-pin");
@@ -341,9 +361,9 @@ function applyPhoneSettings(src) {
     deleteBtn.hidden = !src.ribbonDelete;
     menuDelete.hidden = !src.ribbonDelete;
   }
-  if (typeof src.ribbonPin === "boolean" && pinBtn && menuPin) {
-    pinBtn.hidden = !src.ribbonPin;
-    menuPin.hidden = !src.ribbonPin;
+  if (typeof src.ribbonPin === "boolean") {
+    document.body.classList.toggle("hide-row-pin", !src.ribbonPin);
+    if (menuPin) menuPin.hidden = !src.ribbonPin;
   }
   const note = document.querySelector("#theme-modal .muted");
   if (note) note.textContent = "This follows Appearance on the phone. A change here updates the phone.";
@@ -356,6 +376,39 @@ function applyPhoneSettings(src) {
   applyingPhone = false;
   if (openMessages.length) renderMessages(openMessages, { keepScroll: true });
 }
+const LAUNCHER_ICONS = {
+  cyan: ["#75FBFD", "#1A1A1A"],
+  black: ["#000000", "#F4F4F4"],
+  dark_blue: ["#2854C5", "#1A1A1A"],
+  dark_purple: ["#8C1AF6", "#1A1A1A"],
+  dark_red: ["#8B1A10", "#1A1A1A"],
+  green: ["#75FB4C", "#1A1A1A"],
+  light_blue: ["#5985E1", "#1A1A1A"],
+  orange: ["#F19E39", "#1A1A1A"],
+  purple: ["#EA33F7", "#1A1A1A"],
+  red: ["#EA3323", "#1A1A1A"],
+  white: ["#FFFFFF", "#1A1A1A"],
+  yellow: ["#FFFF55", "#1A1A1A"],
+};
+const LAUNCHER_PATH = "M348.5-531.5Q360-543 360-560t-11.5-28.5Q337-600 320-600t-28.5 11.5Q280-577 280-560t11.5 28.5Q303-520 320-520t28.5-11.5Zm160 0Q520-543 520-560t-11.5-28.5Q497-600 480-600t-28.5 11.5Q440-577 440-560t11.5 28.5Q463-520 480-520t28.5-11.5Zm160 0Q680-543 680-560t-11.5-28.5Q657-600 640-600t-28.5 11.5Q600-577 600-560t11.5 28.5Q623-520 640-520t28.5-11.5ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z";
+function launcherSvg(id) {
+  const spec = LAUNCHER_ICONS[id] || LAUNCHER_ICONS.cyan;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960"><rect width="960" height="960" rx="210" fill="${spec[1]}"/><g transform="translate(480 480) scale(0.56) translate(-480 -480) translate(0 960)"><path fill="${spec[0]}" d="${LAUNCHER_PATH}"/></g></svg>`;
+}
+function applyLauncherIcon(id) {
+  const key = LAUNCHER_ICONS[id] ? id : "cyan";
+  const href = "data:image/svg+xml," + encodeURIComponent(launcherSvg(key));
+  let link = document.querySelector('link[rel="icon"]');
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.href = href;
+  const mark = document.getElementById("brand-mark");
+  if (mark) mark.src = href;
+}
+applyLauncherIcon("cyan");
 let applyingPhone = false;
 let openMessages = [];
 
@@ -370,8 +423,8 @@ function rejectDisabledMedia(file) {
     alert("GIF sending is turned off on the phone.");
     return true;
   }
-  if (isAudioFile(file) && !voiceEnabled) {
-    alert("Voice messages are turned off on the phone.");
+  if (isAudioFile(file)) {
+    alert("Voice notes are not available on this computer.");
     return true;
   }
   return false;
@@ -457,6 +510,7 @@ function on(id, ev, fn) {
 on("refresh-btn", "click", (e) => {
   refreshInbox(e.shiftKey);
 });
+on("logout-btn", "click", logoutComputer);
 on("theme-btn", "click", openTheme);
 on("pair-theme-btn", "click", openTheme);
 on("close-theme", "click", closeTheme);
@@ -507,8 +561,20 @@ async function api(path, options = {}) {
 }
 
 function registerServiceWorker() {
+  // Register once so a worker left by an older version is replaced by the
+  // copy that unregisters itself. Do not cache the shell.
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+  if (window.caches) {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => {
+        if (key.indexOf("lantext-shell") === 0) caches.delete(key);
+      });
+    }).catch(() => {});
+  }
+  navigator.serviceWorker.getRegistrations().then((list) => {
+    if (!list.length) return;
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+  }).catch(() => {});
 }
 
 function saveInboxSnapshot() {
@@ -527,7 +593,32 @@ function restoreInboxSnapshot() {
   } catch (_) {}
 }
 
+function fillDisconnectHint() {
+  const hint = document.getElementById("disconnect-hint");
+  if (!hint) return;
+  hint.textContent = "Stay on " + location.origin + ". Open that same address again and accept the certificate if the browser asks.";
+}
+
+async function logoutComputer() {
+  if (!confirm("Log out this computer? It will be removed from the phone and will need to pair again.")) return;
+  const btn = document.getElementById("logout-btn");
+  if (btn) btn.disabled = true;
+  try {
+    await api("/api/v1/session", { method: "DELETE" });
+    token = "";
+    localStorage.removeItem(TOKEN_KEY);
+    showPair();
+    setPairStatus("This computer is logged out. Pair it again from the phone.");
+  } catch (err) {
+    if (err && err.message === "unpaired") return;
+    alert("Could not log out. The phone did not answer, so this computer is still paired.");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function showDisconnectOverlay(detail) {
+  fillDisconnectHint();
   document.body.classList.add("disconnected");
   disconnectOverlay.hidden = false;
   connLabel.textContent = reconnecting ? "Reconnecting…" : "Offline";
@@ -621,10 +712,16 @@ async function reconnectToPhone() {
     }
     showPair();
     markLive();
-  } catch (_) {
+  } catch (err) {
     reconnecting = false;
     reconnectBtn.disabled = false;
-    noteUnreachable("Still can't reach the phone.", { showNow: true });
+    if (err && err.message === "unpaired") {
+      showPair();
+      setPairStatus("This computer is no longer paired. Enter the PIN shown on the phone.");
+      markLive();
+      return;
+    }
+    noteUnreachable("Still can't reach the phone. Reload this tab if the phone is on Wi-Fi.", { showNow: true });
     scheduleReconnect();
   }
 }
@@ -692,6 +789,7 @@ function moveConversation(delta) {
 }
 
 async function boot() {
+  fillDisconnectHint();
   registerServiceWorker();
   restoreInboxSnapshot();
   if (token) {
@@ -755,7 +853,12 @@ async function refreshInbox(fullReload) {
 
 async function loadInbox(opts = {}) {
   const previous = conversations;
-  conversations = await api("/api/v1/conversations");
+  const loaded = await Promise.all([
+    api("/api/v1/conversations"),
+    api("/api/v1/folders").catch(() => folders),
+  ]);
+  conversations = loaded[0];
+  if (loaded[1] && Array.isArray(loaded[1].archivedIds)) folders = loaded[1];
   sortConversations();
   if (opts.notify) notifyFromInbox(previous, conversations);
   updateTitle();
@@ -769,7 +872,7 @@ async function loadInbox(opts = {}) {
 }
 
 function updateTitle() {
-  const unread = conversations.reduce((n, c) => n + (c.unread || 0), 0);
+  const unread = inboxConversations().reduce((n, c) => n + (c.unread || 0), 0);
   document.title = unread > 0 ? `(${unread}) LanText` : "LanText";
 }
 
@@ -827,34 +930,311 @@ function showDesktopNotice({ title, body, threadId }) {
 }
 
 let searchMatchIds = null;
+function idSet(values) {
+  return new Set((values || []).map((id) => String(id)));
+}
+function trashIds() {
+  return idSet((folders.trash || []).map((row) => row.threadId));
+}
+function archivedIds() {
+  return idSet(folders.archivedIds);
+}
+function inboxConversations() {
+  const archived = archivedIds();
+  const trash = trashIds();
+  return conversations.filter((c) => !archived.has(String(c.id)) && !trash.has(String(c.id)));
+}
+function conversationsForFolder(query) {
+  const q = (query || "").trim().toLowerCase();
+  const archived = archivedIds();
+  const trash = trashIds();
+  if (folder === "trash") {
+    return conversations.filter((c) => trash.has(String(c.id)));
+  }
+  let list = conversations.filter((c) => !trash.has(String(c.id)));
+  if (!q && folder === "inbox") list = list.filter((c) => !archived.has(String(c.id)));
+  if (!q && folder === "archived") list = list.filter((c) => archived.has(String(c.id)));
+  if (q) {
+    list = list.filter((c) => {
+      if (searchMatchIds && searchMatchIds.has(c.id)) return true;
+      return (c.displayName + " " + c.address + " " + c.snippet).toLowerCase().includes(q);
+    });
+  }
+  return list;
+}
+function setFolder(next) {
+  folder = next;
+  const heading = document.getElementById("inbox-heading");
+  const titles = {
+    inbox: "Inbox",
+    archived: "Archived",
+    trash: "Trash",
+    blocked: "Blocked",
+    scheduled: "Scheduled",
+  };
+  if (heading) heading.textContent = titles[next] || "Inbox";
+  const back = document.getElementById("folder-back");
+  if (back) back.hidden = next === "inbox";
+  renderConversations(searchInput ? searchInput.value : "");
+}
+function folderEmpty(text) {
+  convoList.innerHTML = `<p class='muted' style='padding:16px'>${text}</p>`;
+}
+function inboxGroupMode(raw) {
+  return raw === "read" || raw === "date" || raw === "type" || raw === "pinned" ? raw : "none";
+}
+function weekStartMs(today) {
+  let first = 0;
+  try {
+    const info = new Intl.Locale(navigator.language || "en").weekInfo;
+    if (info && typeof info.firstDay === "number") first = info.firstDay % 7;
+  } catch (_) {}
+  const day = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const delta = (day.getDay() - first + 7) % 7;
+  day.setDate(day.getDate() - delta);
+  day.setHours(0, 0, 0, 0);
+  return day.getTime();
+}
+function receivedBucket(timestamp, now) {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const day = new Date(Math.max(0, Number(timestamp) || 0));
+  day.setHours(0, 0, 0, 0);
+  if (day.getTime() >= today.getTime()) return "Today";
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day.getTime() === yesterday.getTime()) return "Yesterday";
+  if (day.getTime() >= weekStartMs(today)) return "This week";
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  if (day.getTime() >= monthStart.getTime()) return "This month";
+  return "Older";
+}
+function groupInbox(rows, mode, now) {
+  const normalized = inboxGroupMode(mode);
+  if (!rows.length || normalized === "none") return [{ title: "", rows }];
+  const order = {
+    read: ["Unread", "Read"],
+    date: ["Today", "Yesterday", "This week", "This month", "Older"],
+    type: ["SMS", "MMS"],
+    pinned: ["Pinned", "Other"],
+  }[normalized];
+  const buckets = new Map(order.map((title) => [title, []]));
+  for (const row of rows) {
+    let title = "";
+    if (normalized === "read") title = row.unread > 0 ? "Unread" : "Read";
+    else if (normalized === "date") title = receivedBucket(row.timestamp, now);
+    else if (normalized === "type") title = row.latestMms ? "MMS" : "SMS";
+    else if (normalized === "pinned") title = row.pinned ? "Pinned" : "Other";
+    const bucket = buckets.get(title);
+    if (bucket) bucket.push(row);
+  }
+  return order.filter((title) => buckets.get(title).length).map((title) => ({ title, rows: buckets.get(title) }));
+}
 function renderConversations(filter) {
   const q = (filter || "").trim().toLowerCase();
   convoList.innerHTML = "";
-  if (!q) sortConversations();
-  const list = !q
-    ? conversations
-    : conversations.filter((c) => {
-        if (searchMatchIds && searchMatchIds.has(c.id)) return true;
-        return (c.displayName + " " + c.address + " " + c.snippet).toLowerCase().includes(q);
-      });
-  if (!list.length) {
-    convoList.innerHTML = "<p class='muted' style='padding:16px'>No conversations</p>";
+  if (!q && folder !== "blocked" && folder !== "scheduled") sortConversations();
+  if (folder === "blocked") {
+    renderBlocked(q);
     return;
   }
-  for (const c of list) {
+  if (folder === "scheduled") {
+    renderScheduled(q);
+    return;
+  }
+  const list = conversationsForFolder(q);
+  if (folder === "trash") {
+    const bar = document.createElement("div");
+    bar.className = "folder-bar";
+    bar.innerHTML = `<button type="button" class="text-btn danger" id="trash-delete-all"${list.length ? "" : " disabled"}>Delete all</button><button type="button" class="text-btn" id="trash-restore-all"${list.length ? "" : " disabled"}>Restore all</button>`;
+    convoList.appendChild(bar);
+    const del = bar.querySelector("#trash-delete-all");
+    const restore = bar.querySelector("#trash-restore-all");
+    if (del) del.addEventListener("click", () => deleteTrashIds(list.map((c) => c.id), true));
+    if (restore) restore.addEventListener("click", () => restoreTrashIds(list.map((c) => c.id)));
+  }
+  if (!list.length) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.style.padding = "16px";
+    note.textContent = folder === "archived" ? "No archived conversations"
+      : folder === "trash" ? "Trash is empty"
+        : "No conversations";
+    convoList.appendChild(note);
+    return;
+  }
+  const grouped = folder === "inbox" && !q;
+  const sections = grouped ? groupInbox(list, inboxGroup, Date.now()) : [{ title: "", rows: list }];
+  let stripe = 0;
+  for (const section of sections) {
+    if (section.title) {
+      const head = document.createElement("p");
+      head.className = "inbox-section";
+      head.textContent = section.title;
+      convoList.appendChild(head);
+    }
+    for (const c of section.rows) {
     const el = document.createElement("div");
-    el.className = "convo" + (c.id === selectedId ? " active" : "") + (c.unread ? " unread" : "") + (c.pinned ? " pinned" : "");
+    el.className = "convo" + (c.id === selectedId ? " active" : "") + (c.unread ? " unread" : "") + (c.pinned ? " pinned" : "") + (stripe % 2 === 1 ? " alt" : "");
+    stripe += 1;
     el.dataset.id = c.id;
+    const action = folder === "archived"
+      ? `<button type="button" class="text-btn row-action" data-unarchive="${escapeHtml(c.id)}">Unarchive</button>`
+      : folder === "trash"
+        ? `<button type="button" class="text-btn row-action" data-restore="${escapeHtml(c.id)}">Restore</button><button type="button" class="text-btn danger row-action" data-trash-delete="${escapeHtml(c.id)}">Delete</button>`
+        : "";
+    const pinLabel = c.pinned ? "Unpin" : "Pin";
+    const pinPath = c.pinned
+      ? "M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"
+      : "M14 4v5c0 1.12.37 2.16 1 3H9c.65-.86 1-1.9 1-3V4h4m3-2H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3V4h1c.55 0 1-.45 1-1s-.45-1-1-1z";
+    const pinButton = folder === "inbox"
+      ? `<button type="button" class="row-pin${c.pinned ? " on" : ""}" data-pin="${escapeHtml(c.id)}" data-pinned="${c.pinned ? "1" : "0"}" aria-label="${pinLabel}" title="${pinLabel}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${pinPath}"/></svg></button>`
+      : "";
     el.innerHTML = `
       ${avatarHtml(c.displayName, c.avatarColor, c.photoUrl)}
       <div>
-        <div class="name">${escapeHtml(c.displayName)}${c.pinned ? '<span class="pin-mark" title="Pinned">📌</span>' : ""}${c.unread ? '<span class="dot"></span>' : ""}</div>
+        <div class="name">${escapeHtml(c.displayName)}${c.unread ? '<span class="dot"></span>' : ""}</div>
         <div class="snippet">${escapeHtml(c.snippet || "")}</div>
       </div>
-      <div class="when">${formatTime(c.timestamp)}</div>`;
-    el.addEventListener("click", () => openThread(c.id, true));
-    el.addEventListener("contextmenu", (e) => showConvoMenu(e, c.id));
+      <div class="when-col"><div class="when">${action || formatTime(c.timestamp)}</div>${pinButton}</div>`;
+    el.addEventListener("click", (e) => {
+      const pin = e.target.closest("[data-pin]");
+      const unarchive = e.target.closest("[data-unarchive]");
+      const restore = e.target.closest("[data-restore]");
+      const remove = e.target.closest("[data-trash-delete]");
+      if (pin) {
+        e.stopPropagation();
+        setPinned(pin.dataset.pin, pin.dataset.pinned !== "1");
+        return;
+      }
+      if (unarchive) { e.stopPropagation(); unarchiveThread(unarchive.dataset.unarchive); return; }
+      if (restore) { e.stopPropagation(); restoreTrashIds([restore.dataset.restore]); return; }
+      if (remove) { e.stopPropagation(); deleteTrashIds([remove.dataset.trashDelete], false); return; }
+      openThread(c.id, folder !== "trash");
+    });
+    if (folder === "inbox") el.addEventListener("contextmenu", (e) => showConvoMenu(e, c.id));
     convoList.appendChild(el);
+    }
+  }
+}
+function renderBlocked(q) {
+  const form = document.createElement("form");
+  form.className = "folder-bar";
+  form.innerHTML = `<input id="block-entry" type="text" placeholder="Phone number" aria-label="Phone number" /><button type="submit" class="text-btn">Block</button>`;
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = form.querySelector("input");
+    const number = (input && input.value || "").trim();
+    if (number) blockNumber(number);
+  });
+  convoList.appendChild(form);
+  const rows = (folders.blocked || []).filter((number) => !q || String(number).toLowerCase().includes(q));
+  if (!rows.length) {
+    folderEmpty("No blocked numbers");
+    convoList.insertBefore(form, convoList.firstChild);
+    return;
+  }
+  for (const number of rows) {
+    const el = document.createElement("div");
+    el.className = "convo plain";
+    el.innerHTML = `<div><div class="name">${escapeHtml(number)}</div></div><button type="button" class="text-btn row-action">Unblock</button>`;
+    el.querySelector("button").addEventListener("click", () => unblockNumber(number));
+    convoList.appendChild(el);
+  }
+}
+function renderScheduled(q) {
+  const rows = (folders.scheduled || []).filter((item) => {
+    if (!q) return true;
+    return (item.address + " " + item.body).toLowerCase().includes(q);
+  });
+  if (!rows.length) {
+    folderEmpty("No scheduled texts");
+    return;
+  }
+  for (const item of rows) {
+    const el = document.createElement("div");
+    el.className = "convo plain";
+    const when = item.sendAt ? formatFullStamp(item.sendAt) : "";
+    const body = item.body ? `<div class="snippet schedule-body">${escapeHtml(item.body)}</div>` : "";
+    el.innerHTML = `<div><div class="name">${escapeHtml(item.address || "")}</div><div class="snippet">${escapeHtml(when)}</div>${body}</div><button type="button" class="text-btn row-action">Cancel</button>`;
+    el.querySelector("button").addEventListener("click", () => cancelScheduled(item.id));
+    convoList.appendChild(el);
+  }
+}
+async function unarchiveThread(id) {
+  if (!id) return;
+  try {
+    await api("/api/v1/conversations/" + encodeURIComponent(id) + "/unarchive", { method: "POST" });
+    folders.archivedIds = (folders.archivedIds || []).filter((row) => String(row) !== String(id));
+    renderConversations(searchInput.value);
+  } catch (err) {
+    alert(err.message || "Could not unarchive that conversation.");
+  }
+}
+async function restoreTrashIds(ids) {
+  const clean = (ids || []).map((id) => String(id)).filter(Boolean);
+  if (!clean.length) return;
+  try {
+    for (const id of clean) {
+      await api("/api/v1/trash/" + encodeURIComponent(id) + "/restore", { method: "POST" });
+    }
+    const gone = new Set(clean);
+    folders.trash = (folders.trash || []).filter((row) => !gone.has(String(row.threadId)));
+    renderConversations(searchInput.value);
+    updateTitle();
+  } catch (err) {
+    alert(err.message || "Could not restore that conversation.");
+  }
+}
+async function deleteTrashIds(ids, all) {
+  const clean = (ids || []).map((id) => String(id)).filter(Boolean);
+  if (!clean.length) return;
+  const prompt = all && clean.length > 1 ? "Delete all?" : "Delete permanently?";
+  if (!window.confirm(prompt)) return;
+  try {
+    for (const id of clean) {
+      await api("/api/v1/trash/" + encodeURIComponent(id), { method: "DELETE" });
+    }
+    const gone = new Set(clean);
+    folders.trash = (folders.trash || []).filter((row) => !gone.has(String(row.threadId)));
+    conversations = conversations.filter((c) => !gone.has(String(c.id)));
+    if (selectedId && gone.has(String(selectedId))) closeOpenThread();
+    renderConversations(searchInput.value);
+    updateTitle();
+  } catch (err) {
+    alert(err.message || "Could not delete that conversation.");
+  }
+}
+async function blockNumber(number) {
+  try {
+    await api("/api/v1/blocked", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ number }),
+    });
+    folders.blocked = (folders.blocked || []).concat([number]);
+    renderConversations("");
+  } catch (err) {
+    alert(err.message || "Could not block that number.");
+  }
+}
+async function unblockNumber(number) {
+  try {
+    await api("/api/v1/blocked?number=" + encodeURIComponent(number), { method: "DELETE" });
+    folders.blocked = (folders.blocked || []).filter((row) => row !== number);
+    renderConversations(searchInput.value);
+  } catch (err) {
+    alert(err.message || "Could not unblock that number.");
+  }
+}
+async function cancelScheduled(id) {
+  if (!id) return;
+  try {
+    await api("/api/v1/scheduled/" + encodeURIComponent(id), { method: "DELETE" });
+    folders.scheduled = (folders.scheduled || []).filter((row) => row.id !== id);
+    renderConversations(searchInput.value);
+  } catch (err) {
+    alert(err.message || "Could not cancel that text.");
   }
 }
 
@@ -887,6 +1267,9 @@ searchInput.addEventListener("input", () => {
 });
 
 async function openThread(id, mark) {
+  const gen = ++threadLoadGen;
+  threadHasMore = false;
+  threadUserMoved = false;
   selectedId = id;
   const convo = conversations.find((c) => c.id === id);
   if (!convo) return;
@@ -911,6 +1294,9 @@ async function openThread(id, mark) {
   syncPinButton();
   renderConversations(searchInput.value);
   const msgs = await api(`/api/v1/conversations/${id}/messages?limit=50`);
+  if (gen !== threadLoadGen || selectedId !== id) return;
+  threadHasMore = msgs.length >= 50;
+  threadUserMoved = false;
   renderMessages(msgs.slice().reverse());
   if (mark) api(`/api/v1/conversations/${id}/read`, { method: "POST" }).catch(() => {});
   composeText.focus();
@@ -918,11 +1304,14 @@ async function openThread(id, mark) {
 
 function renderMessages(msgs, opts) {
   openMessages = msgs || [];
+  const laid = reactionLayout(openMessages);
   const keepScroll = !!(opts && opts.keepScroll);
   const prevScroll = messagesEl.scrollTop;
   messagesEl.innerHTML = "";
   let lastDay = "";
-  for (const m of msgs) {
+  openMessages.forEach((m, index) => {
+    const key = messageKey(m, index);
+    if (laid.hidden.has(key)) return;
     const day = new Date(m.timestamp).toDateString();
     if (day !== lastDay) {
       lastDay = day;
@@ -931,34 +1320,94 @@ function renderMessages(msgs, opts) {
       d.textContent = formatDay(m.timestamp);
       messagesEl.appendChild(d);
     }
+    const wrap = document.createElement("div");
+    wrap.className = "bubble-wrap " + (m.incoming ? "in" : "out");
     const b = document.createElement("div");
     b.className = "bubble " + (m.incoming ? "in" : "out");
-    let html = "";
+    let media = "";
     for (const att of m.attachments || []) {
-      if ((att.mimeType || "").startsWith("image/")) {
-        html += `<img alt="" src="${escapeHtml(att.url)}" />`;
-      } else if ((att.mimeType || "").startsWith("audio/")) {
-        html += `<audio controls preload="none" src="${escapeHtml(att.url)}"></audio>`;
+      const mime = att.mimeType || "";
+      const src = escapeHtml(att.url || "");
+      if (!src) continue;
+      if (mime.startsWith("image/")) {
+        media += `<img alt="" src="${src}" />`;
+      } else if (mime.startsWith("video/")) {
+        media += `<video controls preload="metadata" src="${src}"></video>`;
+      } else if (mime.startsWith("audio/")) {
+        media += `<audio controls preload="none" src="${src}"></audio>`;
       }
     }
-    html += linkify(m.body || "");
+    let html = media;
+    if ((m.body || "").trim()) html += linkify(m.body);
+    else if (!media) html += "Media message";
     const meta = messageMeta(m);
     if (meta) html += `<div class="meta">${escapeHtml(meta)}</div>`;
     b.innerHTML = html;
-    if (m.id) {
-      b.dataset.id = m.id;
-      b.title = "Right-click to delete this message";
-      b.addEventListener("contextmenu", (e) => showMessageMenu(e, m.id));
+    if (m.id) b.dataset.id = m.id;
+    wrap.appendChild(b);
+    const marks = laid.byKey.get(key) || [];
+    if (marks.length) {
+      wrap.classList.add("has-react");
+      const chip = document.createElement("div");
+      chip.className = "react-chip";
+      chip.textContent = reactionChipText(marks);
+      chip.title = reactionDescription(marks);
+      wrap.appendChild(chip);
     }
-    messagesEl.appendChild(b);
+    messagesEl.appendChild(wrap);
+  });
+  if (opts && opts.anchor) {
+    messagesEl.scrollTop = Math.max(0, messagesEl.scrollHeight - opts.prevHeight + opts.prevTop);
+  } else {
+    messagesEl.scrollTop = keepScroll ? prevScroll : messagesEl.scrollHeight;
   }
-  messagesEl.scrollTop = keepScroll ? prevScroll : messagesEl.scrollHeight;
 }
+
+async function loadOlderMessages() {
+  if (threadPaging || !threadHasMore || !selectedId || !openMessages.length) return;
+  const id = selectedId;
+  const gen = threadLoadGen;
+  const oldest = Number(openMessages[0] && openMessages[0].timestamp);
+  if (!Number.isFinite(oldest) || oldest <= 0) {
+    threadHasMore = false;
+    return;
+  }
+  threadPaging = true;
+  const prevHeight = messagesEl.scrollHeight;
+  const prevTop = messagesEl.scrollTop;
+  try {
+    const older = await api(`/api/v1/conversations/${encodeURIComponent(id)}/messages?limit=50&before=${oldest + 1}`);
+    if (gen !== threadLoadGen || selectedId !== id) return;
+    const seen = new Set(openMessages.map((m) => m.id));
+    const fresh = [];
+    for (const m of older.slice().reverse()) {
+      if (m.id && seen.has(m.id)) continue;
+      fresh.push(m);
+    }
+    if (!fresh.length) {
+      threadHasMore = false;
+      return;
+    }
+    threadHasMore = older.length >= 50;
+    renderMessages(fresh.concat(openMessages), { anchor: true, prevHeight, prevTop });
+  } catch (_) {
+  } finally {
+    if (gen === threadLoadGen) threadPaging = false;
+  }
+}
+function noteThreadUserMove() { threadUserMoved = true; }
+messagesEl.addEventListener("wheel", noteThreadUserMove, { passive: true });
+messagesEl.addEventListener("touchstart", noteThreadUserMove, { passive: true });
+messagesEl.addEventListener("pointerdown", noteThreadUserMove);
+messagesEl.addEventListener("scroll", () => {
+  if (!threadUserMoved || messagesEl.scrollTop >= 48) return;
+  loadOlderMessages();
+});
 function messageMeta(m) {
   const parts = [];
   if (phoneDetails.direction) parts.push(m.incoming ? "Received" : "Sent");
   if (phoneDetails.party) parts.push(m.incoming ? (m.displayName || "") : "You");
-  if (phoneDetails.time) parts.push(formatTime(m.timestamp));
+  if (phoneDetails.time) parts.push(formatMessageStamp(m.timestamp));
   if (phoneDetails.type) parts.push((m.type || "sms").toUpperCase());
   const slot = Number(m.simSlot);
   if ((phoneDetails.showSim || phoneDetails.sim) && Number.isInteger(slot) && slot >= 0) {
@@ -979,9 +1428,14 @@ function closeLightbox() {
 }
 messagesEl.addEventListener("click", (e) => {
   const img = e.target.closest("img");
-  if (!img) return;
+  if (!img || !messagesEl.contains(img)) return;
   e.preventDefault();
   openLightbox(img.currentSrc || img.src);
+});
+messagesEl.addEventListener("contextmenu", (e) => {
+  const bubble = e.target.closest && e.target.closest(".bubble");
+  if (!bubble || !messagesEl.contains(bubble) || !bubble.dataset.id) return;
+  showMessageMenu(e, bubble.dataset.id);
 });
 lightbox.addEventListener("click", closeLightbox);
 
@@ -1161,106 +1615,6 @@ function pickGif(hit) {
   }
   gifPanel.hidden = true;
 }
-voiceBtn.addEventListener("click", () => toggleVoice(false));
-document.getElementById("new-voice-btn").addEventListener("click", () => toggleVoice(true));
-async function toggleVoice(forNew) {
-  if (!voiceEnabled) return;
-  if (voiceRec) {
-    await voiceRec.stop();
-    return;
-  }
-  if (!navigator.mediaDevices?.getUserMedia) {
-    alert("This browser cannot record audio.");
-    return;
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  voiceBtn.classList.add("recording");
-  voiceBtn.title = "Stop recording";
-  const chunks = [];
-  const ctx = new AudioContext();
-  const src = ctx.createMediaStreamSource(stream);
-  const proc = ctx.createScriptProcessor(4096, 1, 1);
-  const rate = ctx.sampleRate;
-  proc.onaudioprocess = (ev) => {
-    chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
-  };
-  const mute = ctx.createGain();
-  mute.gain.value = 0;
-  src.connect(proc);
-  proc.connect(mute);
-  mute.connect(ctx.destination);
-  const started = Date.now();
-  const limit = setTimeout(() => voiceRec && voiceRec.stop(), 45000);
-  voiceRec = {
-    stop: async () => {
-      clearTimeout(limit);
-      voiceRec = null;
-      proc.disconnect();
-      src.disconnect();
-      stream.getTracks().forEach((t) => t.stop());
-      await ctx.close();
-      voiceBtn.classList.remove("recording");
-      voiceBtn.title = "Record a voice message";
-      const samples = mergeFloat32(chunks);
-      if (samples.length < rate / 5) return;
-      const wav = encodeWav(downsample(samples, rate, 8000), 8000);
-      const file = new File([wav], "voice.wav", { type: "audio/wav" });
-      if (forNew) setPendingNewImage(file);
-      else setPendingImage(file);
-    },
-  };
-}
-function mergeFloat32(chunks) {
-  let n = 0;
-  for (const c of chunks) n += c.length;
-  const out = new Float32Array(n);
-  let o = 0;
-  for (const c of chunks) {
-    out.set(c, o);
-    o += c.length;
-  }
-  return out;
-}
-function downsample(input, fromRate, toRate) {
-  if (fromRate === toRate) {
-    const out = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i++) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-    }
-    return out;
-  }
-  const outLen = Math.max(1, Math.floor(input.length * toRate / fromRate));
-  const out = new Int16Array(outLen);
-  for (let i = 0; i < outLen; i++) {
-    const src = i * fromRate / toRate;
-    const i0 = Math.min(input.length - 1, Math.floor(src));
-    const s = Math.max(-1, Math.min(1, input[i0]));
-    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-  }
-  return out;
-}
-function encodeWav(samples, sampleRate) {
-  const n = samples.length * 2;
-  const buf = new ArrayBuffer(44 + n);
-  const v = new DataView(buf);
-  const w = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
-  w(0, "RIFF");
-  v.setUint32(4, 36 + n, true);
-  w(8, "WAVE");
-  w(12, "fmt ");
-  v.setUint32(16, 16, true);
-  v.setUint16(20, 1, true);
-  v.setUint16(22, 1, true);
-  v.setUint32(24, sampleRate, true);
-  v.setUint32(28, sampleRate * 2, true);
-  v.setUint16(32, 2, true);
-  v.setUint16(34, 16, true);
-  w(36, "data");
-  v.setUint32(40, n, true);
-  for (let i = 0; i < samples.length; i++) v.setInt16(44 + i * 2, samples[i], true);
-  return buf;
-}
 let emojiMode = "";
 let emojiSel = 0;
 let emojiHits = [];
@@ -1433,8 +1787,12 @@ document.getElementById("copy-number-btn").addEventListener("click", async () =>
     ta.remove();
   }
   const btn = document.getElementById("copy-number-btn");
-  btn.textContent = "Copied";
-  setTimeout(() => { btn.textContent = "Copy Number"; }, 1200);
+  btn.title = "Copied";
+  btn.setAttribute("aria-label", "Copied");
+  setTimeout(() => {
+    btn.title = "Copy Number";
+    btn.setAttribute("aria-label", "Copy Number");
+  }, 1200);
 });
 function sortConversations() {
   conversations.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.timestamp || 0) - (a.timestamp || 0));
@@ -1444,8 +1802,13 @@ function syncPinButton() {
   if (!btn) return;
   const convo = conversations.find((c) => c.id === selectedId);
   const pinned = !!(convo && convo.pinned);
-  btn.textContent = pinned ? "Unpin" : "Pin";
-  btn.title = pinned ? "Unpin this conversation" : "Pin this conversation";
+  btn.classList.toggle("on", pinned);
+  btn.title = pinned ? "Unpin" : "Pin";
+  btn.setAttribute("aria-label", pinned ? "Unpin" : "Pin");
+  const off = btn.querySelector(".pin-off");
+  const on = btn.querySelector(".pin-on");
+  if (off) off.hidden = pinned;
+  if (on) on.hidden = !pinned;
 }
 async function setPinned(id, pinned) {
   const convo = conversations.find((c) => c.id === id);
@@ -1480,6 +1843,7 @@ function showConvoMenu(e, id) {
   e.preventDefault();
   e.stopPropagation();
   hideMessageMenu();
+  hideNavMenu();
   if (!convoMenu) return;
   menuThreadId = id;
   const convo = conversations.find((c) => c.id === id);
@@ -1492,6 +1856,8 @@ function showConvoMenu(e, id) {
   convoMenu.style.top = y + "px";
 }
 function closeOpenThread() {
+  threadLoadGen += 1;
+  threadHasMore = false;
   appView.classList.remove("thread-open");
   selectedId = null;
   if (emptyThread) emptyThread.hidden = false;
@@ -1530,19 +1896,98 @@ async function deleteConversation(id) {
 }
 const messageMenu = document.getElementById("message-menu");
 let menuMessageId = null;
+let menuImageUrl = "";
+let menuCopyImage = false;
 function hideMessageMenu() {
   if (messageMenu) messageMenu.hidden = true;
   menuMessageId = null;
+  menuImageUrl = "";
+  menuCopyImage = false;
 }
 function showMessageMenu(e, id) {
   e.preventDefault();
   e.stopPropagation();
   hideConvoMenu();
+  hideNavMenu();
   if (!messageMenu || !id) return;
+  const message = openMessages.find((m) => m.id === id);
+  if (!message) return;
   menuMessageId = id;
+  const image = messageImage(message, e);
+  menuImageUrl = image ? image.url : "";
+  const bodyText = (message.body || "").trim();
+  const hitImage = !!(e.target.closest && e.target.closest("img"));
+  menuCopyImage = !!menuImageUrl && (hitImage || !bodyText);
+  const download = document.getElementById("message-menu-download");
+  if (download) {
+    download.hidden = !menuImageUrl;
+    download.dataset.name = image ? image.name : "";
+  }
+  const title = document.getElementById("message-menu-title");
+  if (title) title.textContent = message.incoming ? (message.displayName || "Message") : "You";
+  const stamp = document.getElementById("message-menu-stamp");
+  if (stamp) stamp.textContent = formatFullStamp(message.timestamp);
+  const status = document.getElementById("message-menu-status");
+  if (status) {
+    status.hidden = !message.status;
+    status.textContent = message.status || "";
+  }
+  const address = document.getElementById("message-menu-address");
+  if (address) {
+    address.hidden = !message.address;
+    address.textContent = message.address || "";
+  }
+  const react = document.getElementById("message-menu-react");
+  if (react) {
+    react.innerHTML = "";
+    const applied = youReactions(message);
+    for (const spec of TAPBACKS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = spec.symbol;
+      button.title = spec.label;
+      button.setAttribute("aria-label", spec.label);
+      if (applied.has(spec.symbol)) button.classList.add("on");
+      button.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        hideMessageMenu();
+        sendTapback(message, spec, applied.has(spec.symbol));
+      });
+      react.appendChild(button);
+    }
+  }
+  const codeBtn = document.getElementById("message-menu-code");
+  const code = verificationCode(message.body || "");
+  if (codeBtn) {
+    codeBtn.hidden = !code;
+    codeBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      hideMessageMenu();
+      if (code) copyText(code);
+    };
+  }
+  const links = document.getElementById("message-menu-links");
+  if (links) {
+    links.innerHTML = "";
+    const found = messageLinks(message.body || "");
+    found.slice(0, 4).forEach((url, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = found.length === 1 ? "Open link" : "Open " + linkHost(url);
+      button.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        hideMessageMenu();
+        const href = /^www\./i.test(url) ? "https://" + url : url;
+        window.open(href, "_blank", "noopener");
+      });
+      if (index === 0 && found.length === 1) button.id = "message-menu-open-link";
+      links.appendChild(button);
+    });
+  }
   messageMenu.hidden = false;
-  const x = Math.min(e.clientX, window.innerWidth - 200);
-  const y = Math.min(e.clientY, window.innerHeight - 64);
+  const rect = messageMenu.getBoundingClientRect();
+  const x = Math.max(8, Math.min(e.clientX, window.innerWidth - rect.width - 8));
+  const y = Math.max(8, Math.min(e.clientY, window.innerHeight - rect.height - 8));
   messageMenu.style.left = x + "px";
   messageMenu.style.top = y + "px";
 }
@@ -1584,6 +2029,54 @@ on("message-menu-delete", "click", (e) => {
   hideMessageMenu();
   if (id) deleteMessage(id);
 });
+on("message-menu-copy", "click", async (e) => {
+  e.stopPropagation();
+  const message = openMessages.find((m) => m.id === menuMessageId);
+  const imageUrl = menuImageUrl;
+  const asImage = menuCopyImage;
+  hideMessageMenu();
+  if (!message) return;
+  if (asImage && imageUrl) {
+    try {
+      await copyImage(imageUrl);
+    } catch (err) {
+      alert(err.message || "Could not copy that image");
+    }
+    return;
+  }
+  copyText(message.body || "");
+});
+on("message-menu-download", "click", (e) => {
+  e.stopPropagation();
+  const url = menuImageUrl;
+  const name = e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.name : "";
+  hideMessageMenu();
+  if (url) downloadFile(url, name || "image");
+});
+on("message-menu-close", "click", (e) => {
+  e.stopPropagation();
+  hideMessageMenu();
+});
+on("message-menu-unread", "click", async (e) => {
+  e.stopPropagation();
+  const thread = selectedId;
+  hideMessageMenu();
+  if (!thread) return;
+  try {
+    const res = await api("/api/v1/conversations/" + encodeURIComponent(thread) + "/unread", { method: "POST" });
+    if (res && res.ok === false) {
+      alert("No incoming message to mark unread");
+      return;
+    }
+    const convo = conversations.find((c) => c.id === thread);
+    if (convo) convo.unread = Math.max(1, convo.unread || 0);
+    closeOpenThread();
+    renderConversations(searchInput.value);
+    updateTitle();
+  } catch (err) {
+    alert(err.message || "Could not mark as unread.");
+  }
+});
 on("read-btn", "click", () => {
   if (selectedId) markConversationRead(selectedId);
 });
@@ -1593,16 +2086,14 @@ on("delete-thread-btn", "click", () => {
 document.addEventListener("click", () => {
   hideConvoMenu();
   hideMessageMenu();
+  hideNavMenu();
 });
 document.addEventListener("scroll", () => {
   hideConvoMenu();
   hideMessageMenu();
+  hideNavMenu();
 }, true);
-on("pin-btn", "click", () => {
-  const convo = conversations.find((c) => c.id === selectedId);
-  if (!convo) return;
-  setPinned(convo.id, !convo.pinned);
-});
+
 const peopleModal = document.getElementById("people-modal");
 const peopleList = document.getElementById("people-list");
 document.getElementById("people-btn").addEventListener("click", showPeople);
@@ -1756,13 +2247,13 @@ composeForm.addEventListener("submit", async (e) => {
   if (!selectedId || sending) return;
   const body = composeText.value.trim();
   if (pendingGifUrl && !gifEnabled) { alert("GIF sending is turned off on the phone."); return; }
-  if (pendingImage && isAudioFile(pendingImage) && !voiceEnabled) { alert("Voice messages are turned off on the phone."); return; }
+  if (pendingImage && isAudioFile(pendingImage)) { alert("Voice notes are not available on this computer."); return; }
   if (!body && !pendingImage && !pendingGifUrl) return;
   const convo = conversations.find((c) => c.id === selectedId);
   sending = true;
   const sendBtn = document.getElementById("send-btn");
   const previousLabel = sendBtn.textContent;
-  sendBtn.textContent = pendingGifUrl ? "Sending GIF…" : pendingImage ? ((pendingImage.type || "").startsWith("audio/") ? "Sending voice…" : "Sending picture…") : "Sending…";
+  sendBtn.textContent = pendingGifUrl ? "Sending GIF…" : pendingImage ? "Sending picture…" : "Sending…";
   try {
     const dest = (convo?.recipients || []).filter(Boolean);
     const recipients = dest.length ? dest : [convo?.address].filter(Boolean);
@@ -1883,7 +2374,7 @@ newForm.addEventListener("submit", async (e) => {
   const body = document.getElementById("new-body").value.trim();
   const number = selectedContact?.number || contactSearch.value.trim();
   if (pendingNewGifUrl && !gifEnabled) { alert("GIF sending is turned off on the phone."); return; }
-  if (pendingNewImage && isAudioFile(pendingNewImage) && !voiceEnabled) { alert("Voice messages are turned off on the phone."); return; }
+  if (pendingNewImage && isAudioFile(pendingNewImage)) { alert("Voice notes are not available on this computer."); return; }
   if (!number || (!body && !pendingNewImage && !pendingNewGifUrl)) return;
   try {
     const payload = { recipients: [number], body };
@@ -1921,8 +2412,16 @@ function connectEvents() {
     if (recovered) markLive();
     if (recovered) loadInbox().catch(() => {});
   };
-  socket.onclose = () => {
+  socket.onclose = (ev) => {
     if (gen !== eventGen) return;
+    if (ev && ev.reason === "unpaired") {
+      token = "";
+      localStorage.removeItem(TOKEN_KEY);
+      showPair();
+      setPairStatus("This computer is no longer paired. Enter the PIN shown on the phone.");
+      markLive();
+      return;
+    }
     noteUnreachable("The live link to the phone closed.");
     scheduleReconnect();
   };
@@ -1948,10 +2447,16 @@ function connectEvents() {
 }
 
 function avatarHtml(name, color, photoUrl) {
-  const initial = (name || "?").trim().charAt(0).toUpperCase();
-  const img = photoUrl ? `<img alt="" src="${photoUrl}" />` : escapeHtml(initial);
-  return `<div class="avatar" style="background:${color || "#156b57"}">${img}</div>`;
+  const initial = escapeHtml(((name || "?").trim().charAt(0) || "?").toUpperCase());
+  const img = photoUrl ? `<img alt="" src="${escapeHtml(photoUrl)}" />` : "";
+  return `<div class="avatar" style="background:${escapeHtml(color || "#156b57")}">${initial}${img}</div>`;
 }
+
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (!img || img.tagName !== "IMG" || !img.closest) return;
+  if (img.closest(".avatar")) img.remove();
+}, true);
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -2089,6 +2594,417 @@ function linkify(text) {
   });
 }
 
+function formatFullStamp(ts) {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return new Date(n).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+const TAPBACKS = [
+  { symbol: "👍", verb: "Liked", removal: "Removed a like from", label: "Like" },
+  { symbol: "❤️", verb: "Loved", removal: "Removed a heart from", label: "Love" },
+  { symbol: "👎", verb: "Disliked", removal: "Removed a dislike from", label: "Dislike" },
+  { symbol: "😂", verb: "Laughed at", removal: "Removed a laugh from", label: "Laugh" },
+  { symbol: "‼️", verb: "Emphasized", removal: "Removed an exclamation from", label: "Emphasize" },
+  { symbol: "❓", verb: "Questioned", removal: "Removed a question from", label: "Question" },
+];
+function tapbackQuote(body) {
+  const trimmed = String(body || "").trim().replace(/[“”"]/g, "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= 80) return trimmed;
+  return trimmed.slice(0, 80).trimEnd() + "…";
+}
+function tapbackText(message, spec, remove) {
+  const lead = remove ? spec.removal : spec.verb;
+  const quote = tapbackQuote(message.body || "");
+  if (quote) return lead + " “" + quote + "”";
+  const atts = message.attachments || [];
+  if (atts.some((a) => (a.mimeType || "").startsWith("image/"))) return lead + " an image";
+  if (atts.some((a) => (a.mimeType || "").startsWith("video/"))) return lead + " a video";
+  if (atts.some((a) => (a.mimeType || "").startsWith("audio/"))) return lead + " an audio message";
+  return null;
+}
+function youReactions(message) {
+  const laid = reactionLayout(openMessages);
+  const index = openMessages.indexOf(message);
+  const marks = laid.byKey.get(messageKey(message, index)) || [];
+  const on = new Set();
+  for (const mark of marks) {
+    if (mark.names.indexOf("You") >= 0) on.add(mark.symbol);
+  }
+  return on;
+}
+const ECHO_WINDOW_MS = 180000;
+const QUOTED_TAPBACK = /^(Removed a heart from|Removed a like from|Removed a dislike from|Removed a laugh from|Removed an exclamation from|Removed a question from|Laughed at|Emphasized|Questioned|Disliked|Loved|Liked)\s+[“"](.+)[”"]\s*\.?\s*$/s;
+const EMOJI_TAPBACK = /^Reacted (\S+) to [“"](.+)[”"]\s*\.?\s*$/s;
+const BARE_TAPBACK = /^(Removed a heart from|Removed a like from|Removed a dislike from|Removed a laugh from|Removed an exclamation from|Removed a question from|Laughed at|Emphasized|Questioned|Disliked|Loved|Liked)\s+(an image|a photo|a picture|a gif|a video|a movie|an audio message|a voice message|an attachment)\s*\.?\s*$/i;
+function messageKey(message, index) {
+  return message && message.id ? String(message.id) : "m-" + index;
+}
+function tapbackKind(verb) {
+  const v = String(verb || "").toLowerCase();
+  if (v.includes("heart") || v === "loved") return { kind: "love", symbol: "❤️" };
+  if (v.includes("dislike") || v === "disliked") return { kind: "dislike", symbol: "👎" };
+  if (v.includes("laugh") || v.startsWith("laughed")) return { kind: "laugh", symbol: "😂" };
+  if (v.includes("exclamation") || v === "emphasized") return { kind: "emphasis", symbol: "‼️" };
+  if (v.includes("question") || v === "questioned") return { kind: "question", symbol: "❓" };
+  return { kind: "like", symbol: "👍" };
+}
+function mediaHint(phrase) {
+  const p = String(phrase || "").trim().toLowerCase().replace(/^(?:…|\.\.\.)/, "").trim();
+  if (p === "an image" || p === "a photo" || p === "a picture" || p === "a gif") return "image";
+  if (p === "a video" || p === "a movie") return "video";
+  if (p === "an audio message" || p === "a voice message") return "audio";
+  if (p === "an attachment") return "any";
+  return null;
+}
+function parseTapback(body) {
+  const text = String(body || "").trim();
+  const quoted = text.match(QUOTED_TAPBACK);
+  if (quoted) {
+    const verb = quoted[1];
+    const quote = quoted[2].trim();
+    const kind = tapbackKind(verb);
+    return { kind: kind.kind, symbol: kind.symbol, removal: /^removed/i.test(verb), quote, media: mediaHint(quote) };
+  }
+  const emoji = text.match(EMOJI_TAPBACK);
+  if (emoji) {
+    const quote = emoji[2].trim();
+    return { kind: "custom", symbol: emoji[1], removal: false, quote, media: mediaHint(quote) };
+  }
+  const bare = text.match(BARE_TAPBACK);
+  if (!bare) return null;
+  const verb = bare[1];
+  const phrase = bare[2];
+  const kind = tapbackKind(verb);
+  return { kind: kind.kind, symbol: kind.symbol, removal: /^removed/i.test(verb), quote: phrase, media: mediaHint(phrase) || "any" };
+}
+function normalizeQuote(value) {
+  return String(value || "").replace(/\u2019/g, "'").replace(/\u2018/g, "'").replace(/\s+/g, " ").trim();
+}
+function quoteMatches(body, rawQuote) {
+  const trimmed = String(rawQuote || "").trim();
+  const lead = trimmed.startsWith("…") || trimmed.startsWith("...");
+  const tail = trimmed.endsWith("…") || trimmed.endsWith("...");
+  let core = trimmed;
+  if (lead) core = core.replace(/^(?:…|\.\.\.)/, "").trim();
+  if (tail) core = core.replace(/(?:…|\.\.\.)$/, "").trim();
+  if (core.length < 2) return false;
+  const hay = normalizeQuote(body);
+  const needle = normalizeQuote(core);
+  if (needle.length < 2) return false;
+  if (hay === needle || hay === normalizeQuote(trimmed)) return true;
+  if (lead && !tail) return hay.endsWith(needle);
+  if (tail && !lead) return hay.startsWith(needle);
+  if (lead && tail) return hay.includes(needle);
+  return needle.length >= 12 && hay.includes(needle);
+}
+function attachmentMime(att) {
+  return (att && (att.mimeType || att.mime)) || "";
+}
+function matchesMedia(message, hint) {
+  const atts = (message && message.attachments) || [];
+  if (hint === "image") return atts.some((a) => attachmentMime(a).startsWith("image/"));
+  if (hint === "video") return atts.some((a) => attachmentMime(a).startsWith("video/"));
+  if (hint === "audio") return atts.some((a) => attachmentMime(a).startsWith("audio/"));
+  if (hint === "any") return atts.length > 0;
+  return false;
+}
+function findTapbackTarget(messages, index, tap) {
+  let found = -1;
+  for (let i = 0; i < index; i++) {
+    if (parseTapback(messages[i].body)) continue;
+    const matches = tap.media ? matchesMedia(messages[i], tap.media) : quoteMatches(messages[i].body || "", tap.quote);
+    if (matches) found = i;
+  }
+  return found;
+}
+function reactorName(message) {
+  if (!message.incoming) return "You";
+  const name = String(message.displayName || "").trim();
+  if (name) return name;
+  const address = String(message.address || "").trim();
+  return address || "Someone";
+}
+function isOwnEcho(messages, index) {
+  const message = messages[index];
+  if (!message || !message.incoming) return false;
+  const text = String(message.body || "").trim();
+  if (!text) return false;
+  const at = Number(message.timestamp);
+  return messages.some((other, i) => {
+    if (i === index || other.incoming) return false;
+    if (message.threadId && other.threadId && String(other.threadId) !== String(message.threadId)) return false;
+    if (String(other.body || "").trim() !== text) return false;
+    const delta = Math.abs(Number(other.timestamp) - at);
+    return Number.isFinite(delta) && delta <= ECHO_WINDOW_MS;
+  });
+}
+function reactionLayout(messages) {
+  const hidden = new Set();
+  const marks = new Map();
+  (messages || []).forEach((message, index) => {
+    const tap = parseTapback(message.body);
+    if (!tap) return;
+    const target = findTapbackTarget(messages, index, tap);
+    if (target < 0) return;
+    hidden.add(messageKey(message, index));
+    if (isOwnEcho(messages, index)) return;
+    const key = messageKey(messages[target], target);
+    let kinds = marks.get(key);
+    if (!kinds) {
+      kinds = new Map();
+      marks.set(key, kinds);
+    }
+    let people = kinds.get(tap.symbol);
+    if (!people) {
+      people = [];
+      kinds.set(tap.symbol, people);
+    }
+    const name = reactorName(message);
+    if (tap.removal) {
+      for (let i = people.length - 1; i >= 0; i--) {
+        if (people[i] === name) people.splice(i, 1);
+      }
+    } else if (people.indexOf(name) < 0) {
+      people.push(name);
+    }
+  });
+  const byKey = new Map();
+  marks.forEach((kinds, key) => {
+    const list = [];
+    kinds.forEach((names, symbol) => {
+      if (names.length) list.push({ symbol, names: names.slice() });
+    });
+    if (list.length) byKey.set(key, list);
+  });
+  return { hidden, byKey };
+}
+function reactionChipText(marks) {
+  return marks.map((mark) => (mark.names.length > 1 ? mark.symbol + " " + mark.names.length : mark.symbol)).join("  ");
+}
+function reactionDescription(marks) {
+  return marks.map((mark) => {
+    const who = [...new Set(mark.names)].join(" and ") || "Someone";
+    const verb = {
+      "❤️": "loved",
+      "👎": "disliked",
+      "😂": "laughed at",
+      "‼️": "emphasized",
+      "❓": "questioned",
+      "👍": "liked",
+    }[mark.symbol] || ("reacted " + mark.symbol + " to");
+    return who + " " + verb + " this";
+  }).join(". ");
+}
+async function sendTapback(message, spec, remove) {
+  if (!selectedId) return;
+  const body = tapbackText(message, spec, remove);
+  if (!body) {
+    alert("Nothing to react to");
+    return;
+  }
+  try {
+    await api("/api/v1/conversations/" + encodeURIComponent(selectedId) + "/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ body, recipients: [] }),
+    });
+    await openThread(selectedId, false);
+  } catch (err) {
+    alert(err.message || "Could not send that reaction.");
+  }
+}
+function verificationCode(text) {
+  if (!text || !String(text).trim()) return null;
+  const keywords = /(?<![A-Za-z0-9])(?:verification|verify|passcodes?|passwords?|codes?|otps?|pins?|log[\s-]?in|one[\s-]?time|2[\s-]?fa|two[\s-]?factor|security|auth)(?![A-Za-z0-9])/gi;
+  const keys = [];
+  let match;
+  while ((match = keywords.exec(text))) keys.push([match.index, match.index + match[0].length]);
+  if (!keys.length) return null;
+  const hits = [];
+  const prefixed = /(?<![A-Za-z0-9])[A-Za-z]-(\d{4,8})(?!\d)/g;
+  const plain = /(?<!\d)(\d{4,8})(?!\d)/g;
+  const mixed = /(?<![A-Za-z0-9])(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{6,8}(?![A-Za-z0-9])/g;
+  while ((match = prefixed.exec(text))) hits.push({ code: match[1], start: match.index, end: match.index + match[0].length });
+  while ((match = plain.exec(text))) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (start > 0 && text[start - 1] === "-") continue;
+    if (end < text.length && text[end] === "-") continue;
+    hits.push({ code: match[1], start, end });
+  }
+  while ((match = mixed.exec(text))) hits.push({ code: match[0], start: match.index, end: match.index + match[0].length });
+  let best = null;
+  for (const key of keys) {
+    for (const hit of hits) {
+      const gap = hit.end <= key[0] ? key[0] - hit.end : hit.start >= key[1] ? hit.start - key[1] : 0;
+      if (gap > 60) continue;
+      const score = gap * 1000 + Math.abs(hit.code.length - 6);
+      if (!best || score < best.score) best = { code: hit.code, score };
+    }
+  }
+  return best ? best.code : null;
+}
+function messageLinks(text) {
+  if (!text) return [];
+  const re = /(?<![\w@])((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+  const trailing = /[.,;:!?)]+$/;
+  const out = [];
+  let match;
+  while ((match = re.exec(text))) {
+    const raw = match[1].replace(trailing, "");
+    if (raw.length >= 8) out.push(raw);
+  }
+  return out;
+}
+function linkHost(url) {
+  const href = /^www\./i.test(url) ? "https://" + url : url;
+  const rest = href.split("://")[1] || href;
+  return (rest.split("/")[0].split("?")[0] || "link").replace(/^www\./i, "") || "link";
+}
+function messageImage(message, event) {
+  const attachments = message.attachments || [];
+  const hit = event && event.target && event.target.closest && event.target.closest("img");
+  if (hit && (hit.currentSrc || hit.src)) {
+    const url = hit.currentSrc || hit.src;
+    const matched = attachments.find((item) => item.url && url.indexOf(item.url) >= 0);
+    return { url, name: fileNameFromUrl(url, (matched && matched.mimeType) || "") };
+  }
+  const att = attachments.find((item) => (item.mimeType || "").startsWith("image/") && item.url);
+  if (!att) return null;
+  return { url: att.url, name: fileNameFromUrl(att.url, att.mimeType || "") };
+}
+function fileNameFromUrl(url, mime) {
+  try {
+    const path = new URL(url, location.href).pathname;
+    const base = decodeURIComponent(path.split("/").pop() || "");
+    if (base && base.includes(".")) return base;
+  } catch (_) {}
+  const ext = mime === "image/png" ? "png" : mime === "image/gif" ? "gif" : mime === "image/webp" ? "webp" : "jpg";
+  return "image." + ext;
+}
+function blobToPng(blob) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width || 1;
+      canvas.height = img.naturalHeight || img.height || 1;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Could not copy that image"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((out) => {
+        URL.revokeObjectURL(objectUrl);
+        if (out) resolve(out);
+        else reject(new Error("Could not copy that image"));
+      }, "image/png");
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not copy that image"));
+    };
+    img.src = objectUrl;
+  });
+}
+async function copyImage(url) {
+  if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+    throw new Error("This browser cannot copy images");
+  }
+  const png = fetch(url, { credentials: "same-origin", headers: authHeaders() }).then(async (res) => {
+    if (!res.ok) throw new Error("Could not copy that image");
+    const blob = await res.blob();
+    if (blob.type === "image/png") return blob;
+    return blobToPng(blob);
+  });
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+}
+function downloadFile(url, name) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name || "image";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+async function copyText(text) {
+  const value = String(text || "");
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+}
+function hideNavMenu() {
+  const menu = document.getElementById("nav-menu");
+  const button = document.getElementById("nav-btn");
+  if (menu) menu.hidden = true;
+  if (button) button.setAttribute("aria-expanded", "false");
+}
+function showNavMenu() {
+  const menu = document.getElementById("nav-menu");
+  const button = document.getElementById("nav-btn");
+  if (!menu || !button) return;
+  hideConvoMenu();
+  hideMessageMenu();
+  const rect = button.getBoundingClientRect();
+  menu.hidden = false;
+  menu.style.left = Math.max(8, rect.left) + "px";
+  menu.style.top = Math.min(rect.bottom + 6, window.innerHeight - 280) + "px";
+  button.setAttribute("aria-expanded", "true");
+}
+function openComputer() {
+  const modal = document.getElementById("computer-modal");
+  const line = document.getElementById("computer-conn");
+  if (line && connLabel) line.textContent = connLabel.textContent || "";
+  if (modal) modal.hidden = false;
+}
+const navBtn = document.getElementById("nav-btn");
+if (navBtn) {
+  navBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById("nav-menu");
+    if (menu && !menu.hidden) hideNavMenu();
+    else showNavMenu();
+  });
+}
+document.querySelectorAll("#nav-menu button").forEach((button) => {
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideNavMenu();
+    const dest = button.dataset.nav;
+    if (dest === "computer") openComputer();
+    else if (dest === "settings") openTheme();
+    else if (dest) setFolder(dest);
+  });
+});
+const folderBack = document.getElementById("folder-back");
+if (folderBack) folderBack.addEventListener("click", () => setFolder("inbox"));
+const closeComputer = document.getElementById("close-computer");
+const computerModal = document.getElementById("computer-modal");
+if (closeComputer && computerModal) {
+  closeComputer.addEventListener("click", () => { computerModal.hidden = true; });
+  computerModal.addEventListener("click", (e) => { if (e.target === computerModal) computerModal.hidden = true; });
+}
 function formatTime(ts) {
   if (!ts) return "";
   const d = new Date(ts);
@@ -2097,6 +3013,25 @@ function formatTime(ts) {
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function formatMessageStamp(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  const dayStart = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const day = dayStart(d);
+  const today = dayStart(now);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === today) return time;
+  if (day === yesterday.getTime()) return "Yesterday " + time;
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const date = d.toLocaleDateString([], sameYear
+    ? { month: "short", day: "numeric" }
+    : { month: "short", day: "numeric", year: "numeric" });
+  return date + ", " + time;
 }
 
 function formatDay(ts) {
@@ -2114,11 +3049,7 @@ function mergeById(base, extra) {
 }
 
 reconnectBtn.addEventListener("click", () => {
-  if (reconnectTimer != null) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-  reconnectToPhone();
+  location.reload();
 });
 window.addEventListener("online", () => {
   if (disconnectOverlay.hidden === false) reconnectToPhone();

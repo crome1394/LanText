@@ -15,6 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class ContactsRepository(private val context: Context) {
+    private fun appName(): String =
+        (context.applicationContext as? app.lantext.LanTextApp)?.productName() ?: "this app"
+
     data class Contact(
         val id: String,
         val name: String,
@@ -38,6 +41,8 @@ class ContactsRepository(private val context: Context) {
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER,
             ContactsContract.CommonDataKinds.Phone.PHOTO_ID,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_URI,
         )
         resolver.query(uri, projection, null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC")
             ?.use { cursor ->
@@ -47,19 +52,25 @@ class ContactsRepository(private val context: Context) {
                     val number = cursor.string(2)
                     val normalized = PhoneNumbers.normalize(number, region)
                     val photoId = cursor.getLong(3)
-                    val photo = if (photoId > 0) {
-                        ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id.toLongOrNull() ?: 0)
+                    val thumb = cursor.string(4)
+                    val full = cursor.string(5)
+                    val photo = when {
+                        thumb.isNotBlank() -> Uri.parse(thumb)
+                        full.isNotBlank() -> Uri.parse(full)
+                        photoId > 0 -> ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id.toLongOrNull() ?: 0L)
                             .buildUpon()
                             .appendPath(ContactsContract.Contacts.Photo.CONTENT_DIRECTORY)
                             .build()
-                    } else {
-                        null
+                        else -> null
                     }
                     val contact = Contact(id, name, number, normalized, photo, avatarColor(name.ifBlank { number }))
                     list += contact
-                    if (normalized.isNotBlank()) map.putIfAbsent(normalized, contact)
-                    val digits = PhoneNumbers.digitsKeepPlus(number)
-                    if (digits.isNotBlank()) map.putIfAbsent(digits, contact)
+                    for (key in PhoneNumbers.lookupKeys(number, region)) {
+                        val existing = map[key]
+                        if (existing == null || (existing.photoUri == null && contact.photoUri != null)) {
+                            map[key] = contact
+                        }
+                    }
                 }
             }
         cache = list.distinctBy { it.id + it.normalized }
@@ -67,10 +78,10 @@ class ContactsRepository(private val context: Context) {
     }
 
     fun lookup(address: String?): Contact? {
-        val raw = address.orEmpty()
-        if (raw.isBlank()) return null
-        val normalized = PhoneNumbers.normalize(raw, region)
-        return byNumber[normalized] ?: byNumber[PhoneNumbers.digitsKeepPlus(raw)]
+        for (key in PhoneNumbers.lookupKeys(address, region)) {
+            byNumber[key]?.let { return it }
+        }
+        return null
     }
 
     fun search(query: String): List<ContactDto> {
@@ -156,15 +167,34 @@ class ContactsRepository(private val context: Context) {
             ?: throw IllegalStateException("Saved, but could not reload the contact")
     }
 
-    fun photoBytes(number: String): ByteArray? {
+    data class ContactPhoto(val bytes: ByteArray, val mime: String)
+
+    fun photo(number: String): ContactPhoto? {
         val contact = lookup(number) ?: return null
-        val uri = contact.photoUri ?: return null
-        return try {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        if (contact.photoUri == null) return null
+        val id = contact.id.toLongOrNull() ?: return null
+        val person = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
+        val resolver = context.contentResolver
+        val stream = try {
+            ContactsContract.Contacts.openContactPhotoInputStream(resolver, person, false)
+                ?: ContactsContract.Contacts.openContactPhotoInputStream(resolver, person, true)
         } catch (_: Exception) {
             null
+        } ?: try {
+            resolver.openInputStream(contact.photoUri)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val bytes = try {
+            stream.use { it.readBytes() }
+        } catch (_: Exception) {
+            return null
         }
+        if (bytes.isEmpty()) return null
+        return ContactPhoto(bytes, imageContentType(bytes))
     }
+
+    fun photoBytes(number: String): ByteArray? = photo(number)?.bytes
 
     fun displayName(address: String?): String {
         lookup(address)?.name?.let { return it }
@@ -273,11 +303,21 @@ class ContactsRepository(private val context: Context) {
         return "/api/v1/contacts/photo?number=${Uri.encode(key)}"
     }
 
+    /** A group address is several numbers. Use the first person who has a picture. */
+    fun photoUrlFor(address: String?): String? {
+        val raw = address.orEmpty()
+        if (raw.isBlank()) return null
+        for (part in raw.split(',', ';')) {
+            photoUrl(part.trim())?.let { return it }
+        }
+        return null
+    }
+
     private fun toDto(contact: Contact): ContactDto = ContactDto(
         id = contact.id,
         name = contact.name,
         number = contact.number,
-        photoUrl = "/api/v1/contacts/photo?number=${Uri.encode(contact.normalized.ifBlank { contact.number })}",
+        photoUrl = if (contact.photoUri != null) photoUrl(contact.number) else null,
         avatarColor = contact.color,
     )
 
@@ -285,7 +325,7 @@ class ContactsRepository(private val context: Context) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) ==
             PackageManager.PERMISSION_GRANTED
         if (!granted) {
-            throw IllegalStateException("Allow contacts access in the LanText app so it can save names and numbers.")
+            throw IllegalStateException("Allow contacts access in ${appName()} so it can save names and numbers.")
         }
     }
 

@@ -68,7 +68,7 @@ class PairingManager(context: Context) {
         }
         val request = PendingPairing(
             id = Crypto.randomId(),
-            clientName = clientName.ifBlank { "Browser" }.take(80),
+            clientName = pairedDeviceName(clientName.ifBlank { "Browser" }).take(80),
             clientIp = clientIp,
             createdAt = now,
         )
@@ -129,6 +129,16 @@ class PairingManager(context: Context) {
                 if (it.id == deviceId) it.copy(lastUsedAt = System.currentTimeMillis()) else it
             }
             persist(next)
+        }
+    }
+
+    suspend fun rename(deviceId: String, label: String) {
+        val clean = label.trim().take(80)
+        if (clean.isEmpty()) return
+        mutex.withLock {
+            val current = currentDevices()
+            if (current.none { it.id == deviceId }) return@withLock
+            persist(current.map { if (it.id == deviceId) it.copy(label = clean) else it })
         }
     }
 

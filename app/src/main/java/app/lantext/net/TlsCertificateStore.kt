@@ -22,7 +22,7 @@ class TlsCertificateStore(context: Context) {
 
     fun keyStore(bindIp: String?): KeyStore {
         val existing = load()
-        if (existing != null && fingerprintSha256.isNotBlank()) {
+        if (existing != null && fingerprintSha256.isNotBlank() && coversDns(existing, LanDns.HOST)) {
             return existing
         }
         return generate(bindIp)
@@ -38,7 +38,11 @@ class TlsCertificateStore(context: Context) {
         cached?.let { return it }
         if (!storeFile.exists()) return null
         return try {
-            val ks = KeyStore.getInstance("PKCS12")
+            // ktor writes KeyStore.getDefaultType(). On Android that is BKS, not PKCS12.
+            // Reading it as PKCS12 threw, deleted the file, and minted a new certificate
+            // on every process start. Browsers that had already accepted the old one
+            // then failed with no certificate page.
+            val ks = KeyStore.getInstance(KeyStore.getDefaultType())
             storeFile.inputStream().use { ks.load(it, password) }
             cached = ks
             fingerprintSha256 = fingerprintOf(ks)
@@ -58,15 +62,37 @@ class TlsCertificateStore(context: Context) {
                 keySizeInBits = 256
                 password = String(this@TlsCertificateStore.password)
                 daysValid = 825
-                subject = X500Principal("CN=LanText")
+                subject = X500Principal(certificateSubject())
                 ipAddresses = ips.map { InetAddress.getByName(it) }
-                domains = listOf("lantext.local", "localhost")
+                domains = listOf(LanDns.HOST, "localhost")
             }
         }
         storeFile.outputStream().use { ks.store(it, password) }
         cached = ks
         fingerprintSha256 = fingerprintOf(ks)
         return ks
+    }
+
+    private fun certificateSubject(): String {
+        val raw = runCatching { app.lantext.LanTextApp.instance.productLabel.trim() }
+            .getOrDefault("")
+            .replace("\"", "")
+            .ifBlank { "LanText" }
+        return "CN=\"$raw\""
+    }
+
+    private fun coversDns(ks: KeyStore, host: String): Boolean {
+        val cert = ks.getCertificate(ALIAS) as? X509Certificate ?: return false
+        val names = try {
+            dnsNamesFromSan(cert.subjectAlternativeNames)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        // Replacing a certificate the browser already accepted makes fetch()
+        // fail with no warning page. Keep a certificate whose names we cannot read.
+        if (names.isEmpty()) return true
+        val want = host.trim().trimEnd('.')
+        return names.any { it.equals(want, true) }
     }
 
     private fun fingerprintOf(ks: KeyStore): String {
@@ -76,5 +102,21 @@ class TlsCertificateStore(context: Context) {
 
     companion object {
         const val ALIAS = "lantext"
+
+        /** DNS names from a certificate SAN list. The type is a Java Integer, not a Kotlin Int. */
+        fun dnsNamesFromSan(rows: Collection<*>?): List<String> {
+            if (rows == null) return emptyList()
+            return rows.mapNotNull { item ->
+                val row = item as? List<*> ?: return@mapNotNull null
+                val type = (row.getOrNull(0) as? Number)?.toInt() ?: return@mapNotNull null
+                if (type != 2) return@mapNotNull null
+                val text = when (val value = row.getOrNull(1)) {
+                    is String -> value
+                    is ByteArray -> value.toString(Charsets.UTF_8)
+                    else -> return@mapNotNull null
+                }
+                text.trim().trimEnd('.').takeIf { it.isNotEmpty() }
+            }
+        }
     }
 }

@@ -24,7 +24,14 @@ object ThreadPdf {
             .ifBlank { "thread" }
             .take(40)
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(now))
-        return "LanText-$who-$day.pdf"
+        val brand = runCatching { app.lantext.LanTextApp.instance.productLabel.trim() }
+            .getOrDefault("")
+            .ifBlank { "LanText" }
+            .replace(Regex("[^A-Za-z0-9._ -]+"), "")
+            .trim()
+            .replace(' ', '-')
+            .ifBlank { "LanText" }
+        return "$brand-$who-$day.pdf"
     }
 
     fun render(

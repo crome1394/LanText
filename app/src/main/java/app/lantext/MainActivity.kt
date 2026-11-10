@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                     onRecyclePairing = viewModel::recyclePairing,
                     onApprove = viewModel::approvePairing,
                     onDeny = viewModel::denyPairing,
+                    onRename = viewModel::rename,
                     onRevoke = viewModel::revoke,
                 )
             }

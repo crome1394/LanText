@@ -101,7 +101,7 @@ class GatewayController(
                 context.stopService(Intent(context, GatewayService::class.java))
             }
         }
-        val url = if (listening) "https://$ip:${settings.listenPort}" else null
+        val url = if (listening) "https://${LanDns.HOST}:${settings.listenPort}" else null
         val snap = GatewaySnapshot(
             enabled = settings.enabled,
             listening = listening && server != null,
@@ -120,11 +120,14 @@ class GatewayController(
             _snapshot.value = snap
             ToggleWidget.updateAll(context, snap)
         }
-        if (listening) {
+        if (listening && ip != null) {
+            LanDns.advertise(context, ip)
             val persistSsid = ssid ?: WifiGate.lastSsid
-            if (persistSsid != null && ip != null) {
+            if (persistSsid != null) {
                 scope.launch { settingsRepo.rememberLastNetwork(persistSsid, ip) }
             }
+        } else {
+            LanDns.stop()
         }
     }
 
@@ -170,13 +173,11 @@ class GatewayController(
         return true
     }
 
+    /** New PIN only. A new certificate makes a browser that already connected fail with no warning page. */
     @Synchronized
     fun recyclePairing() {
-        val ip = WifiGate.wifiIpv4(context)
         pairing.cancelPending()
-        certs.regenerate(ip)
-        stopServer()
-        startServerIfEligible()
+        pairing.rotatePin()
     }
 
     @Synchronized

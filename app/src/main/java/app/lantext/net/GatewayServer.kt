@@ -6,9 +6,11 @@ import app.lantext.data.PairedDevice
 import app.lantext.data.PairingManager
 import app.lantext.sms.AddPhoneRequest
 import app.lantext.sms.AppearanceRequest
+import app.lantext.sms.BlockRequest
 import app.lantext.sms.ContactsRepository
 import app.lantext.sms.ConversationDto
 import app.lantext.sms.CreateContactRequest
+import app.lantext.sms.DesktopFoldersDto
 import app.lantext.sms.GifSearch
 import app.lantext.sms.PinRequest
 import app.lantext.sms.SendRequest
@@ -89,6 +91,18 @@ class GatewayServer(
             "ribbonRead" to web.ribbonRead,
             "ribbonDelete" to web.ribbonDelete,
             "ribbonPin" to web.ribbonPin,
+            "launcherIcon" to web.launcherIcon.ifBlank { "cyan" },
+            "inboxGroup" to web.inboxGroup.ifBlank { "none" },
+        )
+    }
+
+    private fun folderSnapshot(): DesktopFoldersDto {
+        val desk = app.lantext.LanTextApp.instance.phoneDesktop
+        return DesktopFoldersDto(
+            archivedIds = sms.archivedThreadIds(),
+            trash = desk?.trashed().orEmpty(),
+            blocked = sms.blockedNumbers(),
+            scheduled = desk?.scheduled().orEmpty(),
         )
     }
 
@@ -223,7 +237,12 @@ class GatewayServer(
                     }
                     method == Method.DELETE && uri == "/api/v1/session" -> {
                         deviceFor(session)?.let { pairing.revoke(it.id) }
-                        json(Response.Status.OK, mapOf("ok" to true))
+                        val res = json(Response.Status.OK, mapOf("ok" to true))
+                        res.addHeader(
+                            "Set-Cookie",
+                            "$COOKIE=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict",
+                        )
+                        res
                     }
                     method == Method.GET && uri == "/api/v1/conversations" ->
                         jsonRaw(json.encodeToString(decorateConversations(sms.conversations())))
@@ -252,6 +271,45 @@ class GatewayServer(
                         } else {
                             json(Response.Status.BAD_REQUEST, mapOf("error" to "Could not delete that conversation."))
                         }
+                    }
+                    method == Method.GET && uri == "/api/v1/folders" ->
+                        jsonRaw(json.encodeToString(folderSnapshot()))
+                    method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/unread")) -> {
+                        val id = uri.split("/")[4]
+                        json(Response.Status.OK, mapOf("ok" to sms.markUnread(id)))
+                    }
+                    method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/unarchive")) -> {
+                        sms.setArchived(uri.split("/")[4], false)
+                        json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.POST && uri == "/api/v1/blocked" -> {
+                        val req = json.decodeFromString<BlockRequest>(readBody(session))
+                        sms.blockNumber(req.number)
+                        json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.DELETE && uri == "/api/v1/blocked" -> {
+                        sms.unblockNumber(q("number"))
+                        json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.POST && uri.matches(Regex("/api/v1/trash/[^/]+/restore")) -> {
+                        val desk = app.lantext.LanTextApp.instance.phoneDesktop
+                            ?: return@runBlocking json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
+                        desk.restoreTrash(uri.split("/")[4])
+                        sms.emitRefresh()
+                        json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.DELETE && uri.matches(Regex("/api/v1/trash/[^/]+")) -> {
+                        val desk = app.lantext.LanTextApp.instance.phoneDesktop
+                            ?: return@runBlocking json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
+                        desk.deleteTrash(uri.split("/")[4])
+                        sms.emitRefresh()
+                        json(Response.Status.OK, mapOf("ok" to true))
+                    }
+                    method == Method.DELETE && uri.matches(Regex("/api/v1/scheduled/[^/]+")) -> {
+                        val desk = app.lantext.LanTextApp.instance.phoneDesktop
+                            ?: return@runBlocking json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
+                        desk.cancelScheduled(uri.split("/")[4])
+                        json(Response.Status.OK, mapOf("ok" to true))
                     }
                     method == Method.POST && uri.matches(Regex("/api/v1/conversations/[^/]+/pin")) -> {
                         val id = uri.split("/")[4]
@@ -305,9 +363,9 @@ class GatewayServer(
                         jsonRaw(json.encodeToString(updated))
                     }
                     method == Method.GET && uri == "/api/v1/contacts/photo" -> {
-                        val bytes = contacts.photoBytes(q("number"))
+                        val photo = contacts.photo(q("number"))
                             ?: return@runBlocking notFound()
-                        bytes(bytes, "image/jpeg")
+                        bytes(photo.bytes, photo.mime)
                     }
                     method == Method.GET && uri.startsWith("/api/v1/media/") -> {
                         val part = sms.mediaPart(uri.removePrefix("/api/v1/media/"))
@@ -425,10 +483,24 @@ class GatewayServer(
             } catch (_: Exception) {
                 return json(Response.Status.NOT_FOUND, mapOf("error" to "not_found"))
             }
-            val bytes = stream.use { it.readBytes() }
+            val bytes = brandAsset(mime, stream.use { it.readBytes() })
             val res = newFixedLengthResponse(Response.Status.OK, mime, bytes.inputStream(), bytes.size.toLong())
             secure(res, cacheable = true)
             return res
+        }
+
+        private fun brandAsset(mime: String, bytes: ByteArray): ByteArray {
+            val name = (context.applicationContext as? app.lantext.LanTextApp)?.productLabel?.trim().orEmpty()
+            if (name.isEmpty()) return bytes
+            val textual = mime.startsWith("text/") ||
+                mime.contains("javascript") ||
+                mime.contains("json") ||
+                mime.contains("svg") ||
+                mime.contains("xml")
+            if (!textual) return bytes
+            val text = bytes.toString(Charsets.UTF_8)
+            val branded = app.lantext.brandProductText(text, name)
+            return if (branded == text) bytes else branded.toByteArray(Charsets.UTF_8)
         }
 
         private fun json(status: Response.IStatus, body: Map<String, Any?>): Response {

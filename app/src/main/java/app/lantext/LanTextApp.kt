@@ -20,6 +20,23 @@ class LanTextApp : Application() {
     @Volatile
     var mmsDeliveryReports: Boolean = false
 
+    /** Product name shown in this process. Empty keeps the standalone LanText strings. */
+    @Volatile
+    var productLabel: String = ""
+
+    /** Trash and scheduled texts live in the host app. Null on standalone LanText. */
+    @Volatile
+    var phoneDesktop: PhoneDesktop? = null
+
+    fun productName(): String {
+        val custom = productLabel.trim()
+        if (custom.isNotEmpty()) return custom
+        return runCatching { applicationInfo.loadLabel(packageManager).toString() }
+            .getOrDefault("")
+            .trim()
+            .ifBlank { "this app" }
+    }
+
     lateinit var settings: SettingsRepository
         private set
     lateinit var pairing: PairingManager
@@ -64,4 +81,14 @@ class LanTextApp : Application() {
         lateinit var instance: LanTextApp
             private set
     }
+}
+
+/** Rewrites shipped product names in text this app shows or serves. Leaves the desktop host name alone. */
+fun brandProductText(text: String, product: String): String {
+    val name = product.trim()
+    if (name.isEmpty() || name == "LanText") return text
+    return text
+        .replace("LanMessaging", name)
+        .replace("LanText", name)
+        .replace("lMessages", name)
 }

@@ -27,6 +27,8 @@
         <p class="lede">This page is served by your phone on your home Wi-Fi. Enter the PIN shown in the LanText app, then approve the request on the phone.</p>
         <p id="fp-line" class="fingerprint"></p>
         <form id="pair-form" action="/" method="post">
+          <label for="device-name">Device name</label>
+          <input id="device-name" name="deviceName" type="text" maxlength="80" autocomplete="nickname" />
           <label for="pin">Pairing PIN</label>
           <input id="pin" name="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]{8}" placeholder="00000000" required />
           <button type="submit" id="pair-btn">Pair this computer</button>
@@ -36,23 +38,37 @@
       </div>
     </section>
 
-    <section id="app-view" class="view" hidden>
+    <section id="app-view" class="view mail-shell" hidden>
       <aside id="sidebar">
         <header class="sidebar-head">
-          <div>
-            <h1>LanText</h1>
+          <button type="button" id="nav-btn" class="icon-btn" title="Menu" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+          </button>
+          <div class="brand-block">
+            <div class="brand-row">
+              <img id="brand-mark" alt="" width="32" height="32" src="/favicon.svg" />
+              <h1>LanText</h1>
+            </div>
             <p class="muted" id="conn-label">Connected</p>
           </div>
-          <button id="refresh-btn" class="icon-btn" title="Refresh inbox (Shift-click reloads the page)">↻</button>
-          <button id="theme-btn" class="icon-btn" title="Appearance">Aa</button>
-          <button id="new-btn" class="icon-btn" title="New message (Ctrl+N)">+</button>
+          <div class="sidebar-tools">
+            <button id="refresh-btn" class="icon-btn" title="Refresh inbox (Shift-click reloads the page)">↻</button>
+            <button id="theme-btn" class="icon-btn" title="Appearance">Aa</button>
+            <button type="button" id="logout-btn" class="text-btn" title="Log out and unpair this computer">Log out</button>
+          </div>
         </header>
+        <button id="new-btn" class="compose-btn" title="New message (Ctrl+N)">Compose</button>
         <div class="search-wrap">
-          <input id="search" type="search" placeholder="Search conversations  Ctrl+K" />
+          <svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input id="search" type="search" placeholder="Search messages" title="Search conversations (Ctrl+K)" />
         </div>
         <button type="button" id="notify-banner" class="notify-banner" hidden>
           Enable desktop notifications for new texts
         </button>
+        <div class="inbox-head">
+          <button type="button" id="folder-back" class="icon-btn" hidden aria-label="Back to inbox">‹</button>
+          <p id="inbox-heading" class="inbox-heading">Inbox</p>
+        </div>
         <div id="convo-list" class="convo-list"></div>
       </aside>
       <main id="thread">
@@ -63,35 +79,43 @@
           <header class="thread-head">
             <button id="back-btn" class="icon-btn mobile-only" title="Back">‹</button>
             <div id="thread-avatar" class="avatar" role="button" tabindex="0" title="Contact details"></div>
-            <div>
+            <div class="thread-title">
               <h2 id="thread-name"></h2>
               <p id="thread-number" class="muted"></p>
             </div>
-            <button type="button" id="copy-number-btn" class="text-btn" title="Copy phone number">Copy Number</button>
-            <button type="button" id="people-btn" class="text-btn" title="Contact details">Details</button>
-            <button type="button" id="pin-btn" class="text-btn" title="Pin this conversation">Pin</button>
-            <button type="button" id="read-btn" class="text-btn" title="Mark this conversation as read">Mark read</button>
-            <button type="button" id="delete-thread-btn" class="text-btn danger" title="Delete this conversation">Delete</button>
-            <button type="button" id="pdf-btn" class="text-btn" title="Download this thread as a PDF">Download Thread</button>
+            <button type="button" id="copy-number-btn" class="thread-tool" title="Copy Number" aria-label="Copy Number">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+            <button type="button" id="people-btn" class="thread-tool" title="Details" aria-label="Details">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            </button>
+            <button type="button" id="read-btn" class="thread-tool" title="Mark read" aria-label="Mark read">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.05 21.29 15.51 18.75l1.41-1.41 1.13 1.13 2.12-2.12 1.41 1.41-3.53 3.53zM12.08 19c0-.33-.03-.67-.08-1H4V8l8 5 8-5v5.08c.71.1 1.38.31 2 .6V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h8.08zM20 6l-8 5L4 6h16z"/></svg>
+            </button>
+            <button type="button" id="delete-thread-btn" class="thread-tool danger" title="Delete" aria-label="Delete">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </button>
+            <button type="button" id="pdf-btn" class="thread-tool" title="Download Thread" aria-label="Download Thread">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            </button>
             <button type="button" id="save-contact-btn" class="text-btn" hidden>Save contact</button>
           </header>
           <div id="messages" class="messages"></div>
           <form id="composer">
-            <input id="file-input" type="file" accept="image/*,.gif,audio/*" hidden />
+            <input id="file-input" type="file" accept="image/*,.gif" hidden />
             <button type="button" id="attach-btn" class="icon-btn" title="Attach a picture or GIF">📎</button>
             <button type="button" id="gif-btn" class="icon-btn" title="GIF">GIF</button>
-            <button type="button" id="voice-btn" class="icon-btn" title="Record a voice message">🎤</button>
             <button type="button" id="emoji-btn" class="icon-btn" title="Emoji">😊</button>
             <div class="compose-main">
               <div id="pending-preview" hidden></div>
-              <textarea id="compose-text" rows="1" placeholder="Message, GIF, or voice note" title="Enter to send, Shift+Enter for a new line"></textarea>
+              <textarea id="compose-text" rows="1" placeholder="Message or GIF" title="Enter to send, Shift+Enter for a new line"></textarea>
               <div id="emoji-panel" class="emoji-panel" hidden></div>
               <div id="gif-panel" class="gif-panel" hidden>
                 <input id="gif-search" type="search" placeholder="Search KLIPY" />
                 <p id="gif-status" class="muted" hidden></p>
                 <div id="gif-grid" class="gif-grid"></div>
               </div>
-              <p class="compose-hint">Enter to send · :lol then Tab · GIF or 🎤 for MMS · Shift+Enter for a new line</p>
+              <p class="compose-hint">Enter to send · :lol then Tab · GIF for MMS · Shift+Enter for a new line</p>
             </div>
             <button type="submit" id="send-btn" title="Send (Enter)">Send</button>
           </form>
@@ -108,13 +132,12 @@
         <input id="contact-search" type="search" placeholder="Name or number" />
         <div id="contact-list"></div>
         <form id="new-form">
-          <input id="new-file-input" type="file" accept="image/*,.gif,audio/*" hidden />
+          <input id="new-file-input" type="file" accept="image/*,.gif" hidden />
           <div id="new-pending-preview" hidden></div>
           <textarea id="new-body" rows="3" placeholder="Message (Enter to send, paste a picture or GIF)"></textarea>
           <div class="new-actions">
             <button type="button" id="new-attach-btn">Attach</button>
             <button type="button" id="new-gif-btn">GIF</button>
-            <button type="button" id="new-voice-btn">Voice</button>
             <button type="button" id="new-emoji-btn">Emoji</button>
             <button type="submit">Send</button>
           </div>
@@ -195,8 +218,65 @@
     <button type="button" id="convo-menu-read">Mark as read</button>
     <button type="button" id="convo-menu-delete" class="danger">Delete conversation</button>
   </div>
-  <div id="message-menu" class="convo-menu" hidden>
-    <button type="button" id="message-menu-delete" class="danger">Delete message</button>
+  <div id="nav-menu" class="convo-menu nav-menu" hidden>
+    <button type="button" id="nav-computer" data-nav="computer">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+      LanText
+    </button>
+    <button type="button" id="nav-archived" data-nav="archived">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23 19.15 3.55C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5 6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg>
+      Archived
+    </button>
+    <button type="button" id="nav-trash" data-nav="trash">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      Trash
+    </button>
+    <button type="button" id="nav-blocked" data-nav="blocked">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69L5.69 16.9C4.63 15.55 4 13.85 4 12zm8 8c-1.85 0-3.55-.63-4.9-1.69L18.31 7.1C19.37 8.45 20 10.15 20 12c0 4.42-3.58 8-8 8z"/></svg>
+      Blocked
+    </button>
+    <button type="button" id="nav-scheduled" data-nav="scheduled">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+      Scheduled
+    </button>
+    <button type="button" id="nav-settings" data-nav="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+      Settings
+    </button>
+  </div>
+  <div id="computer-modal" class="modal" hidden>
+    <div class="modal-card">
+      <header>
+        <h2>LanText</h2>
+        <button type="button" id="close-computer" class="icon-btn" aria-label="Close">×</button>
+      </header>
+      <p>This computer is connected to the phone. The address, PIN, and QR code stay on the phone.</p>
+      <p id="computer-conn" class="muted"></p>
+    </div>
+  </div>
+  <div id="message-menu" class="convo-menu message-menu" hidden>
+    <p id="message-menu-title" class="menu-title"></p>
+    <div id="message-menu-react" class="react-row"></div>
+    <p id="message-menu-stamp" class="menu-note"></p>
+    <p id="message-menu-status" class="menu-note" hidden></p>
+    <p id="message-menu-address" class="menu-note" hidden></p>
+    <button type="button" id="message-menu-code" hidden>Copy code</button>
+    <div id="message-menu-links"></div>
+    <div class="menu-icons">
+      <button type="button" id="message-menu-copy" aria-label="Copy" title="Copy">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+      </button>
+      <button type="button" id="message-menu-unread" aria-label="Mark as unread" title="Mark as unread">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22 8.98V18c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2h10.1c-.06.32-.1.66-.1 1 0 1.48.65 2.79 1.67 3.71L12 11 4 6v2l8 5 5.3-3.32c.54.2 1.1.32 1.7.32 1.13 0 2.16-.39 3-1.02zM16 5c0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3-3 1.34-3 3z"/></svg>
+      </button>
+      <button type="button" id="message-menu-download" hidden aria-label="Download" title="Download">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+      </button>
+      <button type="button" id="message-menu-delete" class="danger" aria-label="Delete" title="Delete">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      </button>
+    </div>
+    <button type="button" id="message-menu-close">Close</button>
   </div>
   <div id="gif-hover" hidden>
     <img id="gif-hover-img" alt="" />
@@ -207,9 +287,10 @@
   <div id="disconnect-overlay" hidden>
     <div class="disconnect-card" role="alertdialog" aria-labelledby="disconnect-title" aria-describedby="disconnect-copy">
       <h2 id="disconnect-title">Can't reach the phone</h2>
-      <p id="disconnect-copy" class="lede">LanText is waiting for your phone on the LAN. That happens after this computer sleeps, the phone leaves Wi-Fi, or the listener is off.</p>
+      <p id="disconnect-copy" class="lede">The phone did not answer. It may be off Wi-Fi, or this browser is rejecting the phone's certificate. Reload this tab to see that prompt.</p>
+      <p id="disconnect-hint" class="lede"></p>
       <p id="disconnect-status" class="status"></p>
-      <button type="button" id="reconnect-btn">Reconnect</button>
+      <button type="button" id="reconnect-btn">Reload tab</button>
     </div>
   </div>
   <script src="/app.js"></script>

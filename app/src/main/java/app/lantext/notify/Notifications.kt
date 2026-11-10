@@ -60,20 +60,20 @@ object Notifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val text = if (snap.listening) {
-            snap.url ?: context.getString(R.string.notification_listening)
+            snap.url ?: listeningTitle(context)
         } else {
             when (snap.reason) {
                 GateReason.NO_WIFI -> context.getString(R.string.notification_no_wifi)
                 GateReason.SSID_HIDDEN -> context.getString(R.string.notification_ssid_hidden)
                 GateReason.WRONG_NETWORK -> context.getString(R.string.notification_wrong_network)
-                GateReason.MISSING_LOCAL_NETWORK_PERMISSION -> context.getString(R.string.notification_local_network)
+                GateReason.MISSING_LOCAL_NETWORK_PERMISSION -> localNetworkText(context)
                 else -> context.getString(R.string.notification_waiting)
             }
         }
         return NotificationCompat.Builder(context, CHANNEL_GATEWAY)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(
-                if (snap.listening) context.getString(R.string.notification_listening)
+                if (snap.listening) listeningTitle(context)
                 else context.getString(R.string.notification_waiting),
             )
             .setContentText(text)
@@ -128,5 +128,20 @@ object Notifications {
 
     fun cancelPairing(context: Context) {
         context.getSystemService(NotificationManager::class.java).cancel(PAIRING_ID)
+    }
+
+    private fun productName(context: Context): String? =
+        (context.applicationContext as? app.lantext.LanTextApp)?.productLabel?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun listeningTitle(context: Context): String {
+        val name = productName(context)
+        return if (name != null) "$name is available on this Wi-Fi"
+        else context.getString(R.string.notification_listening)
+    }
+
+    private fun localNetworkText(context: Context): String {
+        val name = productName(context)
+        return if (name != null) "Allow local network access so a computer can open $name"
+        else context.getString(R.string.notification_local_network)
     }
 }

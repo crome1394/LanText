@@ -131,16 +131,21 @@ class WifiMonitor(
         val ssid = fromCallback ?: fromManager
         if (ssid != null) {
             persistSsid(ssid)
-        } else if (WifiGate.lastSsid == null) {
+        } else {
             scheduleSsidRetry()
         }
     }
 
     private fun onWifiAvailable(network: Network) {
+        val previous = WifiGate.lastSsidIpv4
         cm.getLinkProperties(network)?.let { WifiGate.rememberLink(network, it) }
+        val ip = WifiGate.wifiIpv4(context)
+        if (previous != null && ip != null && !WifiGate.sameSubnet24(previous, ip)) {
+            cancelSsidRetry()
+        }
         persistVisibleSsid()
         reevaluate()
-        if (WifiGate.lastSsid == null) scheduleSsidRetry()
+        if (WifiGate.readVisibleSsid(context) == null) scheduleSsidRetry()
     }
 
     private fun onWifiLost(network: Network) {
@@ -174,10 +179,9 @@ class WifiMonitor(
             override fun run() {
                 persistVisibleSsid()
                 reevaluate()
-                if (WifiGate.lastSsid == null &&
-                    (WifiGate.isOnWifi(context) || WifiGate.wifiIpv4(context) != null) &&
-                    retryStep < SSID_RETRY_DELAYS_MS.size
-                ) {
+                val stillHidden = WifiGate.readVisibleSsid(context) == null &&
+                    (WifiGate.isOnWifi(context) || WifiGate.wifiIpv4(context) != null)
+                if (stillHidden && retryStep < SSID_RETRY_DELAYS_MS.size) {
                     mainHandler.postDelayed(this, SSID_RETRY_DELAYS_MS[retryStep])
                     retryStep++
                 } else {
@@ -204,6 +208,6 @@ class WifiMonitor(
     }
 
     companion object {
-        private val SSID_RETRY_DELAYS_MS = longArrayOf(500L, 2_000L, 5_000L, 15_000L)
+        private val SSID_RETRY_DELAYS_MS = longArrayOf(500L, 2_000L, 5_000L, 15_000L, 30_000L, 60_000L)
     }
 }

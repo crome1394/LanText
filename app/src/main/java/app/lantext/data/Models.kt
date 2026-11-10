@@ -59,7 +59,45 @@ data class PhoneWeb(
     val ribbonRead: Boolean = true,
     val ribbonDelete: Boolean = true,
     val ribbonPin: Boolean = true,
+    val launcherIcon: String = "cyan",
+    val inboxGroup: String = "none",
 )
+
+/**
+ * A saved choice wins. A new install that already has an allowed network is on,
+ * because allowing the network is what starts the computer inbox.
+ */
+fun webAccessEnabled(stored: Boolean?, allowedNetworks: Int): Boolean =
+    stored ?: (allowedNetworks > 0)
+
+/**
+ * A browser user-agent captured at pair time reads as "Chrome on Linux".
+ * A name the user chose is kept.
+ */
+fun pairedDeviceName(label: String): String {
+    val raw = label.trim()
+    if (raw.isEmpty()) return "Device"
+    if (!raw.contains("Mozilla/") && !raw.contains("AppleWebKit/")) return raw.take(80)
+    val browser = when {
+        raw.contains("Edg/") || raw.contains("Edge/") -> "Edge"
+        raw.contains("OPR/") || raw.contains("Opera") -> "Opera"
+        raw.contains("Firefox/") -> "Firefox"
+        raw.contains("CriOS/") || raw.contains("Chrome/") -> "Chrome"
+        raw.contains("Safari/") -> "Safari"
+        else -> "Browser"
+    }
+    val os = when {
+        raw.contains("Windows") -> "Windows"
+        raw.contains("Android") -> "Android"
+        raw.contains("CrOS") -> "ChromeOS"
+        raw.contains("iPad") -> "iPad"
+        raw.contains("iPhone") -> "iPhone"
+        raw.contains("Mac OS") || raw.contains("Macintosh") -> "Mac"
+        raw.contains("Linux") -> "Linux"
+        else -> null
+    }
+    return if (os == null) browser else "$browser on $os"
+}
 
 enum class GateReason {
     DISABLED,

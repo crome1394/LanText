@@ -16,7 +16,15 @@ data class ConversationDto(
     val avatarColor: String,
     val contactId: String? = null,
     val pinned: Boolean = false,
+    val latestMms: Boolean = false,
 )
+
+/** True when the newest non-draft message is an MMS. A tie counts as MMS. No MMS stays SMS. */
+fun latestMessageIsMms(newestSmsMillis: Long?, newestMmsMillis: Long?): Boolean {
+    val mms = newestMmsMillis ?: return false
+    val sms = newestSmsMillis ?: return true
+    return mms >= sms
+}
 
 @Serializable
 data class AttachmentDto(
@@ -117,4 +125,31 @@ data class AppearanceRequest(
 @Serializable
 data class PinRequest(
     val pinned: Boolean = true,
+)
+
+@Serializable
+data class BlockRequest(
+    val number: String = "",
+)
+
+@Serializable
+data class DesktopTrash(
+    val threadId: String = "",
+    val trashedAt: Long = 0,
+)
+
+@Serializable
+data class DesktopSchedule(
+    val id: String = "",
+    val address: String = "",
+    val sendAt: Long = 0,
+    val body: String = "",
+)
+
+@Serializable
+data class DesktopFoldersDto(
+    val archivedIds: List<String> = emptyList(),
+    val trash: List<DesktopTrash> = emptyList(),
+    val blocked: List<String> = emptyList(),
+    val scheduled: List<DesktopSchedule> = emptyList(),
 )

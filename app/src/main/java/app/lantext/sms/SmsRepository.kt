@@ -10,6 +10,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.BlockedNumberContract
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
@@ -33,6 +34,9 @@ class SmsRepository(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val events: SharedFlow<String> = _events
+
+    private fun appName(): String =
+        (context.applicationContext as? app.lantext.LanTextApp)?.productName() ?: "this app"
 
     private var observerThread: HandlerThread? = null
     private var observer: ContentObserver? = null
@@ -70,11 +74,16 @@ class SmsRepository(
                 }
                 val address = cursor.getString(iAddress).orEmpty()
                 if (acc.address.isBlank()) acc.address = address
+                val smsType = cursor.getInt(iType)
                 if (acc.snippet.isBlank()) {
                     acc.snippet = cursor.getString(iBody).orEmpty()
                     acc.timestamp = cursor.getLong(iDate)
                 }
-                if (cursor.getInt(iType) == Telephony.Sms.MESSAGE_TYPE_INBOX && cursor.getInt(iRead) == 0) {
+                if (smsType != Telephony.Sms.MESSAGE_TYPE_DRAFT && !acc.sawLiveSms) {
+                    acc.sawLiveSms = true
+                    acc.liveSmsAt = cursor.getLong(iDate)
+                }
+                if (smsType == Telephony.Sms.MESSAGE_TYPE_INBOX && cursor.getInt(iRead) == 0) {
                     acc.unread += 1
                 }
                 acc.ids += cursor.getLong(iId)
@@ -390,7 +399,7 @@ class SmsRepository(
             context.contentResolver.insert(Telephony.Sms.CONTENT_URI, values)
         } catch (_: SecurityException) {
             null
-        } ?: throw IllegalStateException("Set lMessages as the default SMS app to send.")
+        } ?: throw IllegalStateException("Set ${appName()} as the default SMS app to send.")
         return StoredSms(uri, threadId)
     }
 
@@ -587,11 +596,163 @@ class SmsRepository(
     fun mediaPart(partId: String): Pair<String, ByteArray>? {
         val id = partId.toLongOrNull() ?: return null
         val uri = Uri.parse("content://mms/part/$id")
-        val mime = context.contentResolver.query(uri, arrayOf(Telephony.Mms.Part.CONTENT_TYPE), null, null, null)
-            ?.use { if (it.moveToFirst()) it.getString(0) else null }
-            ?: return null
+        val row = context.contentResolver.query(
+            uri,
+            arrayOf(Telephony.Mms.Part.CONTENT_TYPE, Telephony.Mms.Part.NAME, Telephony.Mms.Part.CONTENT_LOCATION),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) null else Triple(
+                cursor.getString(0).orEmpty(),
+                cursor.getString(1),
+                cursor.getString(2),
+            )
+        } ?: return null
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        val name = row.second?.ifBlank { row.third }
+        val mime = displayMime(row.first, name, bytes.copyOf(minOf(16, bytes.size)))
         return mime to bytes
+    }
+
+    fun archivedThreadIds(): List<String> {
+        val out = mutableListOf<String>()
+        try {
+            context.contentResolver.query(
+                Telephony.Threads.CONTENT_URI,
+                arrayOf(Telephony.Threads._ID),
+                "archived=1",
+                null,
+                null,
+            )?.use { cursor ->
+                val id = cursor.getColumnIndex(Telephony.Threads._ID)
+                if (id < 0) return@use
+                while (cursor.moveToNext()) out += cursor.getLong(id).toString()
+            }
+        } catch (_: Exception) {
+        }
+        return out
+    }
+
+    fun setArchived(threadId: String, archived: Boolean) {
+        val id = threadId.toLongOrNull() ?: return
+        try {
+            val values = ContentValues().apply { put("archived", if (archived) 1 else 0) }
+            context.contentResolver.update(
+                ContentUris.withAppendedId(Telephony.Threads.CONTENT_URI, id),
+                values,
+                null,
+                null,
+            )
+            emitRefresh()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun markUnread(threadId: String): Boolean {
+        val id = threadId.toLongOrNull() ?: return false
+        val hit = try {
+            newestIncoming(id)
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        val values = ContentValues().apply {
+            put("read", 0)
+            put("seen", 0)
+        }
+        val rows = try {
+            context.contentResolver.update(hit, values, null, null)
+        } catch (_: Exception) {
+            0
+        }
+        if (rows > 0) emitRefresh()
+        return rows > 0
+    }
+
+    fun blockedNumbers(): List<String> {
+        val out = mutableListOf<String>()
+        try {
+            context.contentResolver.query(
+                BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                arrayOf(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                val index = cursor.getColumnIndex(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER)
+                if (index < 0) return@use
+                while (cursor.moveToNext()) {
+                    val number = cursor.getString(index).orEmpty()
+                    if (number.isNotBlank()) out += number
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return out
+    }
+
+    fun blockNumber(number: String) {
+        val clean = number.trim()
+        if (clean.isEmpty()) return
+        try {
+            if (BlockedNumberContract.isBlocked(context, clean)) return
+            val values = ContentValues().apply {
+                put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, clean)
+            }
+            context.contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI, values)
+        } catch (_: Exception) {
+        }
+    }
+
+    fun unblockNumber(number: String) {
+        val clean = number.trim()
+        if (clean.isEmpty()) return
+        try {
+            context.contentResolver.delete(
+                BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                "${BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER}=?",
+                arrayOf(clean),
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun newestIncoming(threadId: Long): Uri? {
+        var smsUri: Uri? = null
+        var smsAt = -1L
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(Telephony.Sms._ID, Telephony.Sms.DATE),
+            "${Telephony.Sms.THREAD_ID}=? AND ${Telephony.Sms.TYPE}=?",
+            arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_INBOX.toString()),
+            "${Telephony.Sms.DATE} DESC",
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                smsAt = cursor.getLong(1)
+                smsUri = ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, cursor.getLong(0))
+            }
+        }
+        var mmsUri: Uri? = null
+        var mmsAt = -1L
+        context.contentResolver.query(
+            Telephony.Mms.CONTENT_URI,
+            arrayOf(Telephony.Mms._ID, Telephony.Mms.DATE),
+            "${Telephony.Mms.THREAD_ID}=? AND ${Telephony.Mms.MESSAGE_BOX}=?",
+            arrayOf(threadId.toString(), Telephony.Mms.MESSAGE_BOX_INBOX.toString()),
+            "${Telephony.Mms.DATE} DESC",
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val raw = cursor.getLong(1)
+                mmsAt = if (raw <= 10_000_000_000L) raw * 1000 else raw
+                mmsUri = ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, cursor.getLong(0))
+            }
+        }
+        return when {
+            smsUri == null -> mmsUri
+            mmsUri == null -> smsUri
+            mmsAt > smsAt -> mmsUri
+            else -> smsUri
+        }
     }
 
     fun startWatching() {
@@ -662,6 +823,7 @@ class SmsRepository(
                 Telephony.Mms.DATE,
                 Telephony.Mms.READ,
                 Telephony.Mms.MESSAGE_BOX,
+                Telephony.Mms.MESSAGE_TYPE,
             ),
             null,
             null,
@@ -672,15 +834,28 @@ class SmsRepository(
             val iDate = cursor.getColumnIndexOrThrow(Telephony.Mms.DATE)
             val iRead = cursor.getColumnIndexOrThrow(Telephony.Mms.READ)
             val iBox = cursor.getColumnIndexOrThrow(Telephony.Mms.MESSAGE_BOX)
+            val iType = cursor.getColumnIndex(Telephony.Mms.MESSAGE_TYPE)
             while (cursor.moveToNext()) {
                 val threadId = cursor.getLong(iThread)
                 val acc = threads.getOrPut(threadId) { ConversationAcc(threadId = threadId) }
-                val date = cursor.getLong(iDate) * 1000
-                if (date > acc.timestamp) {
-                    acc.timestamp = date
-                    acc.snippet = acc.snippet.ifBlank { "Media message" }
+                val date = mmsTimestampMillis(cursor.getLong(iDate))
+                val box = cursor.getInt(iBox)
+                val type = if (iType >= 0) cursor.getInt(iType) else -1
+                if (box != Telephony.Mms.MESSAGE_BOX_DRAFTS && type != 130 && !acc.latestDecided) {
+                    acc.latestDecided = true
+                    acc.latestMms = latestMessageIsMms(
+                        if (acc.sawLiveSms) acc.liveSmsAt else null,
+                        date,
+                    )
                 }
-                if (cursor.getInt(iBox) == Telephony.Mms.MESSAGE_BOX_INBOX && cursor.getInt(iRead) == 0) {
+                if (box != Telephony.Mms.MESSAGE_BOX_DRAFTS && date >= acc.timestamp) {
+                    val preview = mmsPreview(cursor.getLong(iId))
+                    if (!(type == 130 && preview == "Media message")) {
+                        acc.timestamp = date
+                        acc.snippet = preview
+                    }
+                }
+                if (box == Telephony.Mms.MESSAGE_BOX_INBOX && cursor.getInt(iRead) == 0) {
                     acc.unread += 1
                 }
                 if (acc.address.isBlank()) {
@@ -697,7 +872,8 @@ class SmsRepository(
             if (before != null && before > 0) append(" AND ${Telephony.Mms.DATE}<?")
         }
         val args = if (before != null && before > 0) {
-            arrayOf(threadId.toString(), (before / 1000).toString())
+            // DATE is seconds. Include a picture that shares the boundary second.
+            arrayOf(threadId.toString(), (((before - 1) / 1000) + 1).toString())
         } else {
             arrayOf(threadId.toString())
         }
@@ -709,6 +885,7 @@ class SmsRepository(
                 Telephony.Mms.DATE,
                 Telephony.Mms.MESSAGE_BOX,
                 Telephony.Mms.SUBSCRIPTION_ID,
+                Telephony.Mms.MESSAGE_TYPE,
             ),
             selection,
             args,
@@ -719,12 +896,23 @@ class SmsRepository(
             val iDate = cursor.getColumnIndexOrThrow(Telephony.Mms.DATE)
             val iBox = cursor.getColumnIndexOrThrow(Telephony.Mms.MESSAGE_BOX)
             val iSub = cursor.getColumnIndex(Telephony.Mms.SUBSCRIPTION_ID)
+            val iType = cursor.getColumnIndex(Telephony.Mms.MESSAGE_TYPE)
             while (cursor.moveToNext() && out.size < limit) {
                 val mmsId = cursor.getLong(iId)
                 val address = mmsAddress(mmsId).orEmpty()
                 val box = cursor.getInt(iBox)
+                if (box == Telephony.Mms.MESSAGE_BOX_DRAFTS) continue
                 val parts = mmsParts(mmsId)
                 val text = parts.firstOrNull { it.mimeType.startsWith("text/") }?.text.orEmpty()
+                val kind = if (iType >= 0) cursor.getInt(iType) else -1
+                if (text.isBlank() && parts.none {
+                        it.mimeType.startsWith("image/") ||
+                            it.mimeType.startsWith("video/") ||
+                            it.mimeType.startsWith("audio/")
+                    } && box == Telephony.Mms.MESSAGE_BOX_INBOX && kind == 130
+                ) {
+                    continue
+                }
                 val attachments = parts.filter {
                     it.mimeType.startsWith("image/") ||
                         it.mimeType.startsWith("video/") ||
@@ -744,7 +932,7 @@ class SmsRepository(
                     address = address,
                     displayName = contacts.displayName(address),
                     body = text.ifBlank { if (attachments.isNotEmpty()) "" else "Media message" },
-                    timestamp = cursor.getLong(iDate) * 1000,
+                    timestamp = mmsTimestampMillis(cursor.getLong(iDate)),
                     incoming = box == Telephony.Mms.MESSAGE_BOX_INBOX,
                     type = "mms",
                     status = if (box == Telephony.Mms.MESSAGE_BOX_SENT) "sent" else "received",
@@ -799,17 +987,60 @@ class SmsRepository(
             val iName = cursor.getColumnIndexOrThrow(Telephony.Mms.Part.NAME)
             val iText = cursor.getColumnIndexOrThrow(Telephony.Mms.Part.TEXT)
             while (cursor.moveToNext()) {
-                val mime = cursor.getString(iCt).orEmpty()
-                if (mime == "application/smil") continue
+                val declared = cursor.getString(iCt).orEmpty()
+                if (declared.equals("application/smil", true)) continue
+                val partId = cursor.getLong(iId)
+                val name = cursor.getString(iName)
+                val mime = displayMime(declared, name, partHead(partId))
+                val column = cursor.getString(iText)
+                val text = if (mime.startsWith("text/")) {
+                    partText(column, if (column.isNullOrBlank()) partBytes(partId, 16_000) else null)
+                } else {
+                    column
+                }
                 out += MmsPart(
-                    id = cursor.getLong(iId).toString(),
+                    id = partId.toString(),
                     mimeType = mime,
-                    name = cursor.getString(iName),
-                    text = cursor.getString(iText),
+                    name = name,
+                    text = text,
                 )
             }
         }
         return out
+    }
+
+    private fun mmsPreview(mmsId: Long): String {
+        val parts = mmsParts(mmsId)
+        val text = parts.firstOrNull { it.mimeType.startsWith("text/") }?.text?.trim().orEmpty()
+        if (text.isNotEmpty()) return text
+        val mime = parts.firstOrNull {
+            it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") || it.mimeType.startsWith("audio/")
+        }?.mimeType.orEmpty()
+        return when {
+            mime.startsWith("image/") -> "Picture"
+            mime.startsWith("video/") -> "Video"
+            mime.startsWith("audio/") -> "Audio"
+            else -> "Media message"
+        }
+    }
+
+    private fun partHead(partId: Long): ByteArray? = partBytes(partId, 16)
+
+    private fun partBytes(partId: Long, max: Int): ByteArray? {
+        return try {
+            context.contentResolver.openInputStream(Uri.parse("content://mms/part/$partId"))?.use { stream ->
+                val buf = ByteArray(max)
+                var n = 0
+                while (n < max) {
+                    val read = stream.read(buf, n, max - n)
+                    if (read < 0) break
+                    n += read
+                }
+                if (n == 0) null else buf.copyOf(n)
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private val simSlots = HashMap<Int, Int>()
@@ -846,6 +1077,10 @@ class SmsRepository(
         var snippet: String = "",
         var timestamp: Long = 0L,
         var unread: Int = 0,
+        var latestMms: Boolean = false,
+        var sawLiveSms: Boolean = false,
+        var liveSmsAt: Long = 0L,
+        var latestDecided: Boolean = false,
         val ids: MutableList<Long> = mutableListOf(),
     ) {
         fun toDto(contacts: ContactsRepository, region: String): ConversationDto {
@@ -855,7 +1090,7 @@ class SmsRepository(
                 id = threadId.toString(),
                 address = address,
                 displayName = name,
-                photoUrl = contacts.photoUrl(address),
+                photoUrl = contacts.photoUrlFor(address),
                 snippet = snippet,
                 timestamp = timestamp,
                 unread = unread,
@@ -863,6 +1098,7 @@ class SmsRepository(
                 recipients = address.split(",").map { it.trim() }.filter { it.isNotBlank() },
                 avatarColor = contact?.color ?: ContactsRepository.avatarColor(name.ifBlank { address }),
                 contactId = contact?.id,
+                latestMms = latestMms,
             )
         }
     }

@@ -1,7 +1,9 @@
 package app.lantext.net
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WifiGateTest {
@@ -36,5 +38,22 @@ class WifiGateTest {
         assertNull(WifiGate.rememberedSsidFor(null))
         WifiGate.remember(null)
         assertNull(WifiGate.rememberedSsidFor("10.74.10.93"))
+    }
+
+    @Test
+    fun dhcpOnTheSameSubnetKeepsTheNetwork() {
+        WifiGate.remember(null)
+        assertTrue(WifiGate.sameSubnet24("10.74.10.93", "10.74.10.40"))
+        assertFalse(WifiGate.sameSubnet24("10.74.10.93", "192.168.1.20"))
+        assertFalse(WifiGate.sameSubnet24("10.74.10", "10.74.10.40"))
+        assertFalse(WifiGate.sameSubnet24(null, "10.74.10.40"))
+        WifiGate.remember("Home", "10.74.10.93")
+        WifiGate.noteStationIp("10.74.10.40")
+        assertEquals("Home", WifiGate.lastSsid)
+        assertEquals("Home", WifiGate.rememberedSsidFor("10.74.10.40"))
+        WifiGate.noteStationIp("192.168.1.20")
+        assertNull(WifiGate.lastSsid)
+        assertNull(WifiGate.lastSsidIpv4)
+        WifiGate.remember(null)
     }
 }

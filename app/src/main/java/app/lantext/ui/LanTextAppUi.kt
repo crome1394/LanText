@@ -9,8 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -67,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lantext.BuildConfig
 import app.lantext.R
+import app.lantext.brandProductText
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.lantext.data.AppSettings
@@ -74,6 +74,7 @@ import app.lantext.data.GateReason
 import app.lantext.data.GatewaySnapshot
 import app.lantext.data.PairedDevice
 import app.lantext.data.PendingPairing
+import app.lantext.data.pairedDeviceName
 import app.lantext.data.PermissionState
 import app.lantext.util.ListenPort
 import java.text.DateFormat
@@ -103,6 +104,7 @@ fun LanTextAppUi(
     onRecyclePairing: () -> Unit,
     onApprove: (String) -> Unit,
     onDeny: (String) -> Unit,
+    onRename: (String, String) -> Unit,
     onRevoke: (String) -> Unit,
     embedded: Boolean = false,
     active: Boolean = true,
@@ -120,6 +122,7 @@ fun LanTextAppUi(
     if (!settings.onboardingDone) {
         OnboardingScreen(
             permissions = permissions,
+            appLabel = appLabel,
             onDone = onFinishOnboarding,
         )
         return
@@ -130,7 +133,7 @@ fun LanTextAppUi(
             onDismissRequest = { onDeny(pending.id) },
             title = { Text("Pair this computer?") },
             text = {
-                Text("${pending.clientName} at ${pending.clientIp} is requesting access to your messages. Approve only if this is you.")
+                Text("${pairedDeviceName(pending.clientName)} at ${pending.clientIp} is requesting access to your messages. Approve only if this is you.")
             },
             confirmButton = { TextButton(onClick = { onApprove(pending.id) }) { Text("Approve") } },
             dismissButton = { TextButton(onClick = { onDeny(pending.id) }) { Text("Deny") } },
@@ -138,9 +141,9 @@ fun LanTextAppUi(
     }
 
     val title = when (dest) {
-        Dest.Home -> if (embedded) "LanMessaging" else "LanText"
+        Dest.Home -> appLabel
         Dest.Networks -> "Wi-Fi networks"
-        Dest.Paired -> "Paired computers"
+        Dest.Paired -> "Paired devices"
         Dest.Settings -> "Settings"
         Dest.About -> "About"
     }
@@ -172,6 +175,7 @@ fun LanTextAppUi(
             Dest.Paired -> PairedScreen(
                 modifier = modifier,
                 devices = devices,
+                onRename = onRename,
                 onRevoke = onRevoke,
             )
             Dest.Settings -> SettingsScreen(
@@ -180,7 +184,7 @@ fun LanTextAppUi(
                 onGifEnabled = onGifEnabled,
                 onVoiceEnabled = onVoiceEnabled,
             )
-            Dest.About -> AboutScreen(modifier, permissions)
+            Dest.About -> AboutScreen(modifier, permissions, appLabel)
         }
     }
     if (embedded) {
@@ -218,9 +222,11 @@ fun LanTextAppUi(
 @Composable
 private fun OnboardingScreen(
     permissions: PermissionState,
+    appLabel: String,
     onDone: () -> Unit,
 ) {
     LaunchedEffect(permissions.allGranted) { if (permissions.allGranted) onDone() }
+    val ownApp = appLabel != "LanText"
     Column(
         Modifier
             .fillMaxSize()
@@ -229,7 +235,11 @@ private fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Text from your computer — only at home", style = MaterialTheme.typography.headlineMedium)
-        Text("LanText is a companion for Fossify Messages, Google Messages, or any other SMS app. It never replaces your default messenger.")
+        if (ownApp) {
+            Text("$appLabel opens a private page on Wi-Fi you choose, so you can type on a computer. Nothing is uploaded.")
+        } else {
+            Text("LanText is a companion for Fossify Messages, Google Messages, or any other SMS app. It never replaces your default messenger.")
+        }
         Text("It serves a private web page on Wi-Fi you choose. Nothing is sent to the internet.")
         Text("A prompt explains each permission Android requires. Nothing those permissions unlock is uploaded.")
     }
@@ -257,7 +267,7 @@ private fun PermissionRationaleDialog(
                     "Android will show a system prompt for each of these. Nothing they unlock is uploaded. Nearby devices and location are only so the inbox can read the Wi-Fi name. On Android 17, local network access is what lets a computer on your Wi-Fi open the page.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                permissionRationales(state).forEach { item ->
+                permissionRationales(state, appLabel).forEach { item ->
                     PermissionLine(item.title, item.body, item.granted)
                 }
                 Spacer(Modifier.height(4.dp))
@@ -304,23 +314,44 @@ private fun HomeScreen(
     onAddCurrent: () -> Unit,
     onRecyclePairing: () -> Unit,
 ) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+    // The square tracks the settings card. A fixed bitmap was spilling past the card edges.
+    val side = minOf(
+        (maxWidth - 48.dp).coerceAtLeast(72.dp),
+        (maxHeight * 0.42f).coerceAtLeast(72.dp),
+    )
     Column(
-        modifier
+        Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (snapshot.listening && snapshot.url != null) {
-            Card(Modifier.fillMaxWidth().weight(1f)) {
+            Card(Modifier.fillMaxWidth()) {
                 Column(
                     Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text("Open on your computer", style = MaterialTheme.typography.titleMedium)
-                    Text(snapshot.url, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        snapshot.url,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                    )
+                    val numeric = snapshot.bindAddress
+                    if (!numeric.isNullOrBlank()) {
+                        Text(
+                            "If that name does not open, use https://$numeric:${snapshot.port}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                     val payload = remember(snapshot.url, snapshot.fingerprintSha256, snapshot.pairingPin) {
                         buildString {
                             append(snapshot.url)
@@ -328,21 +359,12 @@ private fun HomeScreen(
                         }
                     }
                     val qr = remember(payload) { QrBitmaps.encode(payload) }
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Image(
-                            bitmap = qr,
-                            contentDescription = "Pairing QR code",
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .aspectRatio(1f),
-                            filterQuality = FilterQuality.None,
-                        )
-                    }
+                    Image(
+                        bitmap = qr,
+                        contentDescription = "Pairing QR code",
+                        modifier = Modifier.size(side),
+                        filterQuality = FilterQuality.None,
+                    )
                     Text(
                         snapshot.pairingPin ?: "------",
                         style = MaterialTheme.typography.headlineMedium,
@@ -350,8 +372,12 @@ private fun HomeScreen(
                     )
                     Text(
                         "SHA-256  ${formatFp(snapshot.fingerprintSha256)}",
+                        modifier = Modifier.fillMaxWidth(),
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     TextButton(onClick = onRecyclePairing) {
                         Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -392,10 +418,11 @@ private fun HomeScreen(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NavButton(Modifier.weight(1f), "Networks", Icons.Outlined.Wifi, onNetworks)
-            NavButton(Modifier.weight(1f), "Computers", Icons.Outlined.Devices, onPaired)
+            NavButton(Modifier.weight(1f), "Devices", Icons.Outlined.Devices, onPaired)
             NavButton(Modifier.weight(1f), "Settings", Icons.Outlined.Settings, onSettings)
             NavButton(Modifier.weight(1f), "About", Icons.Outlined.Info, onAbout)
         }
+    }
     }
 }
 
@@ -491,26 +518,82 @@ private fun NetworksScreen(
 private fun PairedScreen(
     modifier: Modifier,
     devices: List<PairedDevice>,
+    onRename: (String, String) -> Unit,
     onRevoke: (String) -> Unit,
 ) {
     val format = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+    var renaming by remember { mutableStateOf<PairedDevice?>(null) }
     Column(
         modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        Text("A computer can read and send texts only after you approve pairing on this phone.")
+        Text("A device can read and send texts only after you approve pairing on this phone.")
         Spacer(Modifier.height(12.dp))
-        if (devices.isEmpty()) Text("No computers paired yet.")
+        if (devices.isEmpty()) Text("No devices paired yet.")
         devices.forEach { device ->
+            val name = pairedDeviceName(device.label)
             ListItem(
-                headlineContent = { Text(device.label) },
+                headlineContent = {
+                    Text(name, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                },
                 supportingContent = { Text("Last used ${format.format(Date(device.lastUsedAt))}") },
-                trailingContent = { TextButton(onClick = { onRevoke(device.id) }) { Text("Revoke") } },
+                trailingContent = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = { renaming = device },
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) { Text("Rename") }
+                        TextButton(
+                            onClick = { onRevoke(device.id) },
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) { Text("Revoke") }
+                    }
+                },
             )
         }
     }
+    val target = renaming
+    if (target != null) {
+        RenameDeviceDialog(
+            initial = pairedDeviceName(target.label),
+            onDismiss = { renaming = null },
+            onSave = { name ->
+                onRename(target.id, name)
+                renaming = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun RenameDeviceDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var name by remember(initial) { mutableStateOf(initial.take(80)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename device") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(80) },
+                label = { Text("Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(name.trim()) },
+                enabled = name.isNotBlank(),
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -565,7 +648,7 @@ private fun SettingsScreen(
 }
 
 @Composable
-private fun AboutScreen(modifier: Modifier, permissions: PermissionState) {
+private fun AboutScreen(modifier: Modifier, permissions: PermissionState, appLabel: String) {
     Column(
         modifier
             .fillMaxSize()
@@ -573,20 +656,29 @@ private fun AboutScreen(modifier: Modifier, permissions: PermissionState) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("LanText", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        val ownApp = appLabel != "LanText"
+        Text(appLabel, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(
             "Version ${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text("LanText is a local-network companion. It does not replace Fossify Messages or any other SMS app.")
+        if (ownApp) {
+            Text("$appLabel keeps messages on this phone. A computer on your Wi-Fi can read and send after you pair it.")
+        } else {
+            Text("LanText is a local-network companion. It does not replace Fossify Messages or any other SMS app.")
+        }
         Text("Messages stay on your phone and travel only across the Wi-Fi you allow, over HTTPS, to computers you have paired.")
         Text("There is no account, no cloud, no analytics, and no crash reporter.")
-        Text("Mark-as-read in the system inbox may be limited because LanText is not the default SMS app. Your phone messenger remains the source of truth. Delete conversations there, not here.")
+        if (ownApp) {
+            Text("Send, delete, and mark as read happen in $appLabel. A paired computer can do the same.")
+        } else {
+            Text("Mark-as-read in the system inbox may be limited because LanText is not the default SMS app. Your phone messenger remains the source of truth. Delete conversations there, not here.")
+        }
         Text("On Xiaomi, Huawei, Samsung, and similar devices, set battery usage to Unrestricted so the server is not killed while you are at home.")
 
         val uriHandler = LocalUriHandler.current
-        Row(
+        if (!ownApp) Row(
             Modifier
                 .clickable { uriHandler.openUri(GITHUB_URL) }
                 .padding(vertical = 4.dp),
@@ -613,24 +705,27 @@ private fun AboutScreen(modifier: Modifier, permissions: PermissionState) {
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "These are the permissions this phone actually uses. LanText does not send the data they unlock to anyone else.",
+                    brandProductText(
+                        "These are the permissions this phone actually uses. LanText does not send the data they unlock to anyone else.",
+                        appLabel,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                PermissionCard("SMS", SMS_WHY)
+                PermissionCard("SMS", if (ownApp) "Read and send texts and picture messages through your carrier. Messages stay on this phone." else SMS_WHY)
                 PermissionCard("Contacts", CONTACTS_WHY)
                 if (permissions.notificationsRequired) {
                     PermissionCard("Notifications", NOTIFICATIONS_WHY)
                 }
                 if (permissions.nearbyDevicesRequired) {
-                    PermissionCard("Nearby devices", NEARBY_DEVICES_WHY)
+                    PermissionCard("Nearby devices", brandProductText(NEARBY_DEVICES_WHY, appLabel))
                 }
                 if (permissions.locationRequired) {
-                    PermissionCard("Location", LOCATION_WHY)
+                    PermissionCard("Location", brandProductText(LOCATION_WHY, appLabel))
                 }
                 if (permissions.localNetworkRequired) {
                     PermissionCard("Local network", LOCAL_NETWORK_WHY)
                 }
-                PermissionCard("Network", NETWORK_WHY)
+                PermissionCard("Network", brandProductText(NETWORK_WHY, appLabel))
             }
         }
 
@@ -693,17 +788,18 @@ private data class PermissionRationale(
     val granted: Boolean,
 )
 
-private fun permissionRationales(state: PermissionState): List<PermissionRationale> = buildList {
-    add(PermissionRationale("SMS", SMS_WHY, state.sms))
+private fun permissionRationales(state: PermissionState, appLabel: String): List<PermissionRationale> = buildList {
+    val sms = if (appLabel == "LanText") SMS_WHY else "Read and send texts and picture messages through your carrier. Messages stay on this phone."
+    add(PermissionRationale("SMS", sms, state.sms))
     add(PermissionRationale("Contacts", CONTACTS_WHY, state.contacts))
     if (state.notificationsRequired) {
         add(PermissionRationale("Notifications", NOTIFICATIONS_WHY, state.notifications))
     }
     if (state.nearbyDevicesRequired) {
-        add(PermissionRationale("Nearby devices", NEARBY_DEVICES_WHY, state.nearbyDevices))
+        add(PermissionRationale("Nearby devices", brandProductText(NEARBY_DEVICES_WHY, appLabel), state.nearbyDevices))
     }
     if (state.locationRequired) {
-        add(PermissionRationale("Location", LOCATION_WHY, state.location))
+        add(PermissionRationale("Location", brandProductText(LOCATION_WHY, appLabel), state.location))
     }
     if (state.localNetworkRequired) {
         add(PermissionRationale("Local network", LOCAL_NETWORK_WHY, state.localNetwork))
@@ -728,9 +824,9 @@ private const val GITHUB_URL = "https://github.com/crome1394/LanText"
 
 private val LAN_OPERATOR_NOTES = listOf(
     "The HTTPS certificate is created on this phone (ECDSA P-256). It is not signed by a public CA, so the browser warning is expected. Compare the SHA-256 fingerprint on the home screen with what the browser shows.",
-    "Use the IP URL from the home screen (for example https://192.168.1.42:8743). Names like lantext.local are not advertised on the network, so they will not resolve unless you add them in DNS or /etc/hosts. Even then, the certificate only lists the Wi-Fi IP, so a hostname in the browser will fail the name check.",
+    "The address on the home screen is https://${app.lantext.net.LanDns.HOST} and the port. The phone advertises that name on the allowed Wi-Fi, so the same page can open after the phone gets a new address. If the name does not open, use the numeric address shown under it. The certificate lists ${app.lantext.net.LanDns.HOST}. The browser warning is still expected, because this certificate is not from a public CA.",
     "A DHCP reservation or static IP keeps the URL and QR stable when the phone reconnects.",
-    "If you already run Caddy, HAProxy, or OPNsense on the LAN, reverse-proxy to the phone’s IP and port and serve lantext.local with an internal CA. Keep that proxy on private addresses only. Pairing (PIN plus Approve) still applies. Do not port-forward this to the internet.",
+    "If you already run Caddy, HAProxy, or OPNsense on the LAN, reverse-proxy to the phone’s IP and port and serve ${app.lantext.net.LanDns.HOST} with an internal CA. Keep that proxy on private addresses only. Pairing (PIN plus Approve) still applies. Do not port-forward this to the internet.",
     "If the computer sleeps or the phone is off the allowed Wi-Fi, Caddy returns HTTP 502 because the phone did not answer. After the first successful visit, the browser keeps a copy of the page and greys out with a Reconnect button instead of Chrome’s 502 screen.",
 )
 

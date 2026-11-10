@@ -68,9 +68,33 @@ object WifiGate {
             remember(it, ip)
             return it
         }
-        // Only reuse a remembered name on the same station IPv4. Otherwise a
-        // redacted SSID on a different LAN would look like the allowlist.
+        // A new DHCP address on the same home LAN keeps the network we already
+        // allowed. A different subnet drops it, so another house is not treated
+        // as home while its name is still hidden.
+        noteStationIp(ip)
         return rememberedSsidFor(ip)
+    }
+
+    fun sameSubnet24(a: String?, b: String?): Boolean {
+        if (a.isNullOrBlank() || b.isNullOrBlank()) return false
+        val left = a.substringBeforeLast('.', "")
+        val right = b.substringBeforeLast('.', "")
+        if (left.isEmpty() || left != right) return false
+        return a.count { it == '.' } == 3 && b.count { it == '.' } == 3
+    }
+
+    fun noteStationIp(ip: String?) {
+        synchronized(this) {
+            val name = lastSsid ?: return
+            val previous = lastSsidIpv4 ?: return
+            if (ip.isNullOrBlank() || ip == previous) return
+            if (sameSubnet24(ip, previous)) {
+                lastSsidIpv4 = ip
+            } else {
+                lastSsid = null
+                lastSsidIpv4 = null
+            }
+        }
     }
 
     fun readVisibleSsid(context: Context): String? {
@@ -118,10 +142,11 @@ object WifiGate {
         val ssid = currentSsid(context)
             ?: settings.lastNetworkSsid?.let { stored ->
                 val clean = normalizeSsid(stored)
+                val storedIp = settings.lastNetworkIpv4
                 if (clean != null &&
                     clean in settings.allowedSsids &&
                     ip != null &&
-                    ip == settings.lastNetworkIpv4
+                    (ip == storedIp || sameSubnet24(ip, storedIp))
                 ) {
                     remember(clean, ip)
                     clean

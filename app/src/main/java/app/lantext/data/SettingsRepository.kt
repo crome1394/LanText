@@ -22,7 +22,7 @@ class SettingsRepository(context: Context) {
 
     val settings: Flow<AppSettings> = store.data.map { prefs ->
         AppSettings(
-            enabled = prefs[KEY_ENABLED] == true,
+            enabled = webAccessEnabled(prefs[KEY_ENABLED], (prefs[KEY_ALLOWED] ?: emptySet()).size),
             onboardingDone = prefs[KEY_ONBOARDING] == true,
             allowedSsids = prefs[KEY_ALLOWED] ?: emptySet(),
             knownSsids = prefs[KEY_KNOWN] ?: emptySet(),
@@ -55,6 +55,7 @@ class SettingsRepository(context: Context) {
         store.edit { prefs ->
             prefs[KEY_ALLOWED] = (prefs[KEY_ALLOWED] ?: emptySet()) + clean
             prefs[KEY_KNOWN] = (prefs[KEY_KNOWN] ?: emptySet()) + clean
+            prefs[KEY_ENABLED] = true
         }
     }
 
