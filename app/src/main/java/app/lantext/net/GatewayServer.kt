@@ -52,6 +52,7 @@ class GatewayServer(
 
     fun start() {
         val keyStore = certs.keyStore(bindAddress)
+            ?: error("Computer inbox certificate could not be opened")
         val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
         kmf.init(keyStore, certs.password)
         val ssl = SSLContext.getInstance("TLS")
