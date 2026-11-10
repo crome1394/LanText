@@ -94,9 +94,7 @@ class GatewayServer(
 
     private inner class LanHttp(host: String, port: Int) : NanoWSD(host, port) {
         override fun serve(session: IHTTPSession): Response {
-            val remote = session.headers["http-client-ip"]
-                ?: session.headers["remote-addr"]
-                ?: session.remoteIpAddress
+            val remote = session.remoteIpAddress.orEmpty()
             if (!PrivateNetwork.isPrivateHost(remote)) {
                 return json(Response.Status.FORBIDDEN, mapOf("error" to "lan_only"))
             }
@@ -104,7 +102,7 @@ class GatewayServer(
                 return super.serve(session)
             }
             return try {
-                route(session)
+                route(session, remote)
             } catch (e: IllegalArgumentException) {
                 json(Response.Status.BAD_REQUEST, mapOf("error" to (e.message ?: "bad request")))
             } catch (e: IllegalStateException) {
@@ -121,7 +119,7 @@ class GatewayServer(
             return EventSocket(handshake)
         }
 
-        private fun route(session: IHTTPSession): Response {
+        private fun route(session: IHTTPSession, remote: String): Response {
             val uri = session.uri.substringBefore('?')
             val method = session.method
             fun q(name: String) = session.parameters[name]?.firstOrNull().orEmpty()
@@ -162,7 +160,7 @@ class GatewayServer(
                     pairing.beginPair(
                         pin,
                         name,
-                        session.headers["remote-addr"] ?: session.remoteIpAddress,
+                        remote,
                     )
                 }
                 if (!ok) {
