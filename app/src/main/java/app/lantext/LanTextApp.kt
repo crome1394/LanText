@@ -16,6 +16,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 class LanTextApp : Application() {
+    /** Picture messages ask the carrier for a delivery report when this is on. */
+    @Volatile
+    var mmsDeliveryReports: Boolean = false
+
     lateinit var settings: SettingsRepository
         private set
     lateinit var pairing: PairingManager

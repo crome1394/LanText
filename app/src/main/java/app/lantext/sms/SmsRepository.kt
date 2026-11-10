@@ -341,7 +341,8 @@ class SmsRepository(
         require(imageBytes != null && imageBytes.isNotEmpty()) { "MMS requires an attachment" }
         val mime = imageMime ?: "image/jpeg"
         val subId = subscriptionId ?: android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
-        val outbound = MmsSender.send(context, smsManager(subscriptionId), dest, body, imageBytes, mime, subId)
+        val reports = (context.applicationContext as? app.lantext.LanTextApp)?.mmsDeliveryReports == true
+        val outbound = MmsSender.send(context, smsManager(subscriptionId), dest, body, imageBytes, mime, subId, reports)
         val threadId = Telephony.Threads.getOrCreateThreadId(context, dest.toHashSet())
         val storedId = try {
             if (recentMmsExists(threadId, body)) null

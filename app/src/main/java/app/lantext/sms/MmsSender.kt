@@ -136,6 +136,7 @@ object MmsSender {
         image: ByteArray,
         mime: String,
         subscriptionId: Int,
+        deliveryReport: Boolean = false,
     ): Outbound {
         val limits = carrierLimits(manager)
         val media = prepare(image, mime, limits.first, limits.second)
@@ -182,7 +183,7 @@ object MmsSender {
         req.setExpiry(7 * 24 * 60 * 60)
         try {
             req.setPriority(PduHeaders.PRIORITY_NORMAL)
-            req.setDeliveryReport(PduHeaders.VALUE_NO)
+            req.setDeliveryReport(if (deliveryReport) PduHeaders.VALUE_YES else PduHeaders.VALUE_NO)
             req.setReadReport(PduHeaders.VALUE_NO)
         } catch (_: InvalidHeaderValueException) {
         }
