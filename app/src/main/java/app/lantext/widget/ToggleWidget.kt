@@ -3,6 +3,7 @@ package app.lantext.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -18,15 +19,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class ToggleWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        val snap = snapshot(context)
-        ids.forEach { id -> manager.updateAppWidget(id, views(context, snap)) }
-    }
-
+class ToggleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action != ACTION_TOGGLE) return
+        if (intent.action != ToggleWidget.ACTION_TOGGLE) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
@@ -37,6 +32,13 @@ class ToggleWidget : AppWidgetProvider() {
                 pending.finish()
             }
         }
+    }
+}
+
+class ToggleWidget : AppWidgetProvider() {
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        val snap = snapshot(context)
+        ids.forEach { id -> manager.updateAppWidget(id, views(context, snap)) }
     }
 
     companion object {
@@ -99,7 +101,7 @@ class ToggleWidget : AppWidgetProvider() {
             val toggle = PendingIntent.getBroadcast(
                 context,
                 1,
-                Intent(context, ToggleWidget::class.java).setAction(ACTION_TOGGLE),
+                Intent(context, ToggleReceiver::class.java).setAction(ACTION_TOGGLE),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             remote.setOnClickPendingIntent(R.id.widget_toggle, toggle)
