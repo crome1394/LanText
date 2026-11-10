@@ -580,6 +580,7 @@ class GatewayServer(
         override fun onPong(pong: NanoWSD.WebSocketFrame?) = Unit
         override fun onException(exception: java.io.IOException?) {
             job?.cancel()
+            scope.cancel()
         }
     }
 
