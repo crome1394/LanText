@@ -27,13 +27,13 @@ class LanDnsTest {
 
     @Test
     fun answerCarriesTheCurrentAddress() {
-        val bytes = LanDns.answerA(0x12, 0x34, "10.74.10.93")
+        val bytes = LanDns.answerA(0x12, 0x34, "192.168.50.20")
         assertEquals(0x12, bytes[0].toInt() and 0xff)
         assertEquals(0x34, bytes[1].toInt() and 0xff)
-        assertEquals(10, bytes[bytes.size - 4].toInt() and 0xff)
-        assertEquals(74, bytes[bytes.size - 3].toInt() and 0xff)
-        assertEquals(10, bytes[bytes.size - 2].toInt() and 0xff)
-        assertEquals(93, bytes[bytes.size - 1].toInt() and 0xff)
+        assertEquals(192, bytes[bytes.size - 4].toInt() and 0xff)
+        assertEquals(168, bytes[bytes.size - 3].toInt() and 0xff)
+        assertEquals(50, bytes[bytes.size - 2].toInt() and 0xff)
+        assertEquals(20, bytes[bytes.size - 1].toInt() and 0xff)
     }
 }
 
@@ -77,7 +77,7 @@ class PhoneLookupTest {
         assertTrue(PhoneNumbers.lookupKeys("+1 49447", "US").contains("49447"))
         assertTrue(PhoneNumbers.lookupKeys("1-49447", "US").contains("49447"))
         assertTrue(PhoneNumbers.lookupKeys("26499", "US").contains("26499"))
-        assertTrue(PhoneNumbers.lookupKeys("+1 604-369-8359", "US").none { it.length in 3..6 })
+        assertTrue(PhoneNumbers.lookupKeys("+1 555-555-0100", "US").none { it.length in 3..6 })
         assertTrue(PhoneNumbers.phoneLookupForms("49447", "US").contains("+149447"))
     }
 }

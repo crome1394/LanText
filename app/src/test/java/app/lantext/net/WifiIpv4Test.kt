@@ -11,56 +11,56 @@ class WifiIpv4Test {
     fun prefersDhcpWifiAddressOverOtherPrivateIps() {
         val picked = WifiIpv4.select(
             listOf(
-                Ipv4Candidate("10.215.173.1", 24, "ap0"),
-                Ipv4Candidate("10.221.35.60", 32, "rmnet1"),
-                Ipv4Candidate("10.74.10.93", 24, "wlan0"),
+                Ipv4Candidate("172.16.8.1", 24, "ap0"),
+                Ipv4Candidate("172.16.9.60", 32, "rmnet1"),
+                Ipv4Candidate("192.168.50.20", 24, "wlan0"),
             ),
-            dhcpHost = "10.74.10.93",
-            gatewayHost = "10.74.10.1",
+            dhcpHost = "192.168.50.20",
+            gatewayHost = "192.168.50.1",
         )
-        assertEquals("10.74.10.93", picked)
+        assertEquals("192.168.50.20", picked)
     }
 
     @Test
     fun dhcpWinsEvenIfMissingFromLinkAddresses() {
         val picked = WifiIpv4.select(
-            listOf(Ipv4Candidate("10.215.173.1", 24, "wlan0")),
-            dhcpHost = "10.74.10.93",
-            gatewayHost = "10.74.10.1",
+            listOf(Ipv4Candidate("172.16.8.1", 24, "wlan0")),
+            dhcpHost = "192.168.50.20",
+            gatewayHost = "192.168.50.1",
         )
-        assertEquals("10.74.10.93", picked)
+        assertEquals("192.168.50.20", picked)
     }
 
     @Test
     fun skipsHotspotAndCellularWhenNoDhcp() {
         val picked = WifiIpv4.select(
             listOf(
-                Ipv4Candidate("10.215.173.1", 24, "ap0"),
-                Ipv4Candidate("10.221.35.60", 32, "rmnet1"),
-                Ipv4Candidate("10.74.10.93", 24, "wlan0"),
+                Ipv4Candidate("172.16.8.1", 24, "ap0"),
+                Ipv4Candidate("172.16.9.60", 32, "rmnet1"),
+                Ipv4Candidate("192.168.50.20", 24, "wlan0"),
             ),
         )
-        assertEquals("10.74.10.93", picked)
+        assertEquals("192.168.50.20", picked)
     }
 
     @Test
     fun skipsGatewayAndSlash32Tunnels() {
         val picked = WifiIpv4.select(
             listOf(
-                Ipv4Candidate("10.74.10.1", 24, "wlan0"),
-                Ipv4Candidate("10.221.35.60", 32, "wlan0"),
-                Ipv4Candidate("10.74.10.93", 24, "wlan0"),
+                Ipv4Candidate("192.168.50.1", 24, "wlan0"),
+                Ipv4Candidate("172.16.9.60", 32, "wlan0"),
+                Ipv4Candidate("192.168.50.20", 24, "wlan0"),
             ),
-            gatewayHost = "10.74.10.1",
+            gatewayHost = "192.168.50.1",
         )
-        assertEquals("10.74.10.93", picked)
+        assertEquals("192.168.50.20", picked)
     }
 
     @Test
     fun littleEndianDhcpInt() {
-        // 10.74.10.93 in WifiManager little-endian form
-        val packed = 10 or (74 shl 8) or (10 shl 16) or (93 shl 24)
-        assertEquals("10.74.10.93", WifiIpv4.fromLittleEndian(packed))
+        // 192.168.50.20 in WifiManager little-endian form
+        val packed = 192 or (168 shl 8) or (50 shl 16) or (20 shl 24)
+        assertEquals("192.168.50.20", WifiIpv4.fromLittleEndian(packed))
         assertNull(WifiIpv4.fromLittleEndian(0))
     }
 
